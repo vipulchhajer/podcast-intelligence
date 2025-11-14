@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+"""
+Podcast Intelligence CLI - Single entry point for all commands.
+"""
+
+import sys
+import json
+from pathlib import Path
+from datetime import datetime
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+import click
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+
+console = Console()
+
+FEEDS_FILE = Path(__file__).parent / "feeds.json"
+
+
+def load_feeds():
+    """Load saved RSS feeds."""
+    if not FEEDS_FILE.exists():
+        return {}
+    return json.loads(FEEDS_FILE.read_text()).get("feeds", {})
+
+
+def save_feeds(feeds):
+    """Save RSS feeds to file."""
+    FEEDS_FILE.write_text(json.dumps({"feeds": feeds}, indent=2))
+
+
+def resolve_feed_url(name_or_url):
+    """Convert feed name to URL if it's a saved feed, otherwise return as-is."""
+    feeds = load_feeds()
+    if name_or_url in feeds:
+        return feeds[name_or_url]["url"]
+    return name_or_url
+
+
+@click.group()
+@click.version_option(version="0.1.0")
+def cli():
+    """
+    🎙️ Podcast Intelligence - AI-powered podcast analysis
+    
+    Process podcasts locally with transcription and summarization.
+    """
+    pass
+
+
+@cli.command()
+@click.argument('feed_name_or_url')
+@click.option('--limit', '-l', default=20, help='Number of episodes to show')
+def list(feed_name_or_url, limit):
+    """
+    List episodes from a podcast RSS feed.
+    
+    FEED_NAME_OR_URL: Saved feed name (e.g., "10-happier") or full RSS URL
+    """
+    rss_url = resolve_feed_url(feed_name_or_url)
+    from scripts.list_episodes import main as list_main
+    sys.argv = ['list_episodes.py', rss_url, '--limit', str(limit)]
+    list_main()
+
+
+@cli.command()
+@click.argument('feed_name_or_url')
+@click.argument('episode_number', type=int, default=0)
+def process(feed_name_or_url, episode_number):
+    """
+    Download, transcribe, and summarize a podcast episode.
+    
+    FEED_NAME_OR_URL: Saved feed name (e.g., "10-happier") or full RSS URL
+    EPISODE_NUMBER: 0 for latest, or specific episode index
+    """
+    rss_url = resolve_feed_url(feed_name_or_url)
+    from scripts.download_and_transcribe import main as process_main
+    sys.argv = ['download_and_transcribe.py', rss_url, str(episode_number)]
+    process_main()
+
+
+@cli.command()
+@click.argument('episode_dir', type=click.Path(exists=True))
+def resummarize(episode_dir):
+    """Re-summarize an existing episode with updated prompts."""
+    from scripts.resummarize import main as resummarize_main
+    sys.argv = ['resummarize.py', episode_dir]
+    resummarize_main()
+
+
+@cli.group()
+def feed():
+    """Manage saved podcast feeds."""
+    pass
+
+
+@feed.command('add')
+@click.argument('name')
+@click.argument('url')
+def feed_add(name, url):
+    """
+    Save a podcast RSS feed with a friendly name.
+    
+    Example: podcast feed add "10-happier" "https://feeds.libsyn.com/570160/rss"
+    """
+    feeds = load_feeds()
+    feeds[name] = {
+        "name": name,
+        "url": url,
+        "added": datetime.now().strftime("%Y-%m-%d")
+    }
+    save_feeds(feeds)
+    console.print(f"✓ Added feed: [bold cyan]{name}[/bold cyan]")
+    console.print(f"  URL: {url}")
+    console.print(f"\n[dim]Now you can use: ./podcast process {name} 0[/dim]")
+
+
+@feed.command('list')
+def feed_list():
+    """List all saved podcast feeds."""
+    feeds = load_feeds()
+    
+    if not feeds:
+        console.print("[yellow]No saved feeds yet.[/yellow]")
+        console.print("\n[dim]Add one with: ./podcast feed add <name> <url>[/dim]")
+        return
+    
+    table = Table(title="📻 Saved Podcast Feeds", show_header=True, header_style="bold cyan")
+    table.add_column("Name", style="yellow", width=20)
+    table.add_column("URL", style="white", width=50)
+    table.add_column("Added", style="dim")
+    
+    for name, info in feeds.items():
+        table.add_row(name, info["url"], info.get("added", "Unknown"))
+    
+    console.print(table)
+    console.print("\n[dim]Use feed name in commands: ./podcast process <name> 0[/dim]")
+
+
+@feed.command('remove')
+@click.argument('name')
+def feed_remove(name):
+    """Remove a saved podcast feed."""
+    feeds = load_feeds()
+    
+    if name not in feeds:
+        console.print(f"[red]Feed '{name}' not found.[/red]")
+        console.print("\n[dim]See all feeds: ./podcast feed list[/dim]")
+        return
+    
+    del feeds[name]
+    save_feeds(feeds)
+    console.print(f"✓ Removed feed: [bold yellow]{name}[/bold yellow]")
+
+
+@cli.command()
+@click.option('--limit', '-l', default=10, help='Number of recent episodes to show')
+def recent(limit):
+    """Show recently processed episodes (for easy resummarization)."""
+    episodes_dir = Path("output") / "episodes"
+    
+    if not episodes_dir.exists():
+        console.print("[yellow]No episodes processed yet.[/yellow]")
+        return
+    
+    # Get all episode directories with their modification times
+    episode_dirs = []
+    for podcast_dir in episodes_dir.iterdir():
+        if not podcast_dir.is_dir():
+            continue
+        for episode_dir in podcast_dir.iterdir():
+            if not episode_dir.is_dir():
+                continue
+            
+            # Get metadata for better display
+            metadata_path = episode_dir / "metadata.json"
+            if metadata_path.exists():
+                try:
+                    metadata = json.loads(metadata_path.read_text())
+                    episode_dirs.append({
+                        "path": str(episode_dir),
+                        "podcast": metadata.get("podcast", "Unknown"),
+                        "episode": metadata.get("episode_title", "Unknown"),
+                        "date": metadata.get("published", "Unknown"),
+                        "mtime": episode_dir.stat().st_mtime
+                    })
+                except:
+                    pass
+    
+    # Sort by modification time (most recent first)
+    episode_dirs.sort(key=lambda x: x["mtime"], reverse=True)
+    episode_dirs = episode_dirs[:limit]
+    
+    if not episode_dirs:
+        console.print("[yellow]No episodes found.[/yellow]")
+        return
+    
+    table = Table(title="🕐 Recently Processed Episodes", show_header=True, header_style="bold cyan")
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Podcast", style="yellow", width=30)
+    table.add_column("Episode", style="white", width=40)
+    
+    for idx, ep in enumerate(episode_dirs, 1):
+        table.add_row(
+            str(idx),
+            ep["podcast"][:30],
+            ep["episode"][:40]
+        )
+    
+    console.print(table)
+    console.print("\n[bold]To re-summarize an episode:[/bold]")
+    for idx, ep in enumerate(episode_dirs, 1):
+        console.print(f"  [dim]{idx}.[/dim] ./podcast resummarize \"{ep['path']}\"")
+
+
+@cli.command()
+def examples():
+    """Show example commands and workflows."""
+    console.print(Panel.fit(
+        """[bold cyan]Common Workflows[/bold cyan]
+
+[bold yellow]1. Save a podcast feed (once):[/bold yellow]
+   podcast feed add "10-happier" "https://feeds.libsyn.com/570160/rss"
+
+[bold yellow]2. List your saved feeds:[/bold yellow]
+   podcast feed list
+
+[bold yellow]3. Explore episodes (use saved name!):[/bold yellow]
+   podcast list "10-happier"
+
+[bold yellow]4. Process latest episode:[/bold yellow]
+   podcast process "10-happier" 0
+
+[bold yellow]5. Show recent episodes:[/bold yellow]
+   podcast recent
+
+[bold yellow]6. Re-summarize (copy path from recent):[/bold yellow]
+   podcast resummarize output/episodes/10-happier-with-dan-harris/...
+
+[bold green]📖 For full setup guide, run:[/bold green] cat README.md
+        """,
+        title="🎙️ Usage Examples",
+        border_style="cyan"
+    ))
+
+
+@cli.command()
+def setup():
+    """Show setup and environment requirements."""
+    console.print(Panel.fit(
+        """[bold cyan]Setup Requirements[/bold cyan]
+
+[bold yellow]1. Install dependencies:[/bold yellow]
+   brew install ffmpeg ollama
+   uv sync  # or: pip install -e .
+
+[bold yellow]2. Start Ollama server:[/bold yellow]
+   ollama serve &
+
+[bold yellow]3. Pull LLM model:[/bold yellow]
+   ollama pull llama3.2
+
+[bold yellow]4. Activate virtual environment:[/bold yellow]
+   source .venv/bin/activate
+
+[bold green]✓ Ready to use![/bold green]
+
+[dim]Run 'podcast examples' to see usage examples.[/dim]
+        """,
+        title="🔧 Environment Setup",
+        border_style="green"
+    ))
+
+
+@cli.command()
+def commands():
+    """List all available commands."""
+    table = Table(title="📋 Available Commands", show_header=True, header_style="bold cyan")
+    table.add_column("Command", style="yellow", width=35)
+    table.add_column("Description", style="white")
+    
+    table.add_row(
+        "[bold]Feed Management[/bold]",
+        ""
+    )
+    table.add_row(
+        "podcast feed list",
+        "List all saved podcast feeds"
+    )
+    table.add_row(
+        "podcast feed add <name> <url>",
+        "Save a podcast RSS feed"
+    )
+    table.add_row(
+        "podcast feed remove <name>",
+        "Remove a saved feed"
+    )
+    table.add_row(
+        "",
+        ""
+    )
+    table.add_row(
+        "[bold]Episode Processing[/bold]",
+        ""
+    )
+    table.add_row(
+        "podcast list <feed>",
+        "List episodes from a feed"
+    )
+    table.add_row(
+        "podcast process <feed> [num]",
+        "Download, transcribe & summarize"
+    )
+    table.add_row(
+        "podcast recent",
+        "Show recently processed episodes"
+    )
+    table.add_row(
+        "podcast resummarize <dir>",
+        "Re-generate summary"
+    )
+    table.add_row(
+        "",
+        ""
+    )
+    table.add_row(
+        "[bold]Help & Info[/bold]",
+        ""
+    )
+    table.add_row(
+        "podcast examples",
+        "Show usage examples"
+    )
+    table.add_row(
+        "podcast setup",
+        "Show environment setup"
+    )
+    table.add_row(
+        "podcast commands",
+        "Show this list (you are here!)"
+    )
+    table.add_row(
+        "podcast --help",
+        "Detailed help for any command"
+    )
+    
+    console.print(table)
+    console.print("\n[dim]💡 Tip: <feed> can be a saved feed name or full RSS URL[/dim]")
+
+
+if __name__ == '__main__':
+    cli()
+
