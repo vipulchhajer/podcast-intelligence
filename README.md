@@ -1,6 +1,6 @@
 # 🎙️ Podcast Intelligence
 
-Local, private podcast transcription and AI-powered summarization for Apple Silicon.
+Local, private podcast transcription and AI-powered summarization for Apple Silicon. Inspired by [Tomasz Tunguz's workflow](https://www.youtube.com/watch?v=8P7v1lgl-1s)
 
 > **⚠️ QUICK START REMINDER**: Every new terminal session, run:
 > ```bash
