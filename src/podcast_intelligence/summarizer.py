@@ -10,13 +10,17 @@ from rich.panel import Panel
 
 console = Console()
 
+# Prompt version - increment this when making significant prompt changes
+# This helps track which summaries need to be regenerated
+PROMPT_VERSION = "3.4"  # Added explicit "PLAIN TEXT ONLY - No asterisks, no markdown, no bold markers" to all section prompts
+
 
 class PodcastSummarizer:
     """Summarize podcast transcripts using local LLM via Ollama."""
     
     def __init__(
         self,
-        model: str = "llama3.2",
+        model: str = "qwen2.5:7b",
         ollama_host: str = "http://localhost:11434",
         num_ctx: int = 32768
     ):
@@ -103,13 +107,14 @@ class PodcastSummarizer:
         
         summary_data = {}
         
-        # Store metadata
+        # Store metadata and version
         if podcast_name or episode_title or host or published_date:
             summary_data["metadata"] = {
                 "podcast": podcast_name or "Unknown",
                 "episode": episode_title or "Unknown",
                 "host": host or "Unknown",
-                "date": published_date or "Unknown"
+                "date": published_date or "Unknown",
+                "prompt_version": PROMPT_VERSION
             }
         
         # Build metadata header for prompts
@@ -127,14 +132,41 @@ class PodcastSummarizer:
         
         # 1. Executive Summary
         console.print("  📝 Creating executive summary...")
-        summary_prompt = f"""You are analyzing a complete podcast transcript. {metadata_header}Write a concise 2-3 paragraph executive summary.
+        summary_prompt = f"""You are analyzing a complete podcast transcript. {metadata_header}Write a concise, scannable executive summary.
 
 CRITICAL INSTRUCTIONS FOR ACCURACY:
 - Summarize only what was ACTUALLY discussed in the conversation
 - Do NOT add information, interpretations, or conclusions not present in the transcript
 - Stick to the facts and main points from the conversation
 
-Start your summary by clearly identifying the podcast, episode, host, and date (if provided above), then capture the main topic and key points discussed.
+FORMATTING REQUIREMENTS:
+Start with episode identification, then use a structured format that's easy to scan:
+
+Episode: [Podcast Name - Episode Title]
+Host: [Name]
+Date: [Date]
+
+Overview: A 2-3 sentence overview of what this episode covers and why it matters.
+
+Key Discussion Points:
+• Main point 1 with brief context
+• Main point 2 with brief context
+• Main point 3 with brief context
+(Include 3-6 bullet points covering the core topics discussed)
+
+Example:
+Episode: SaaStr - Enterprise Sales Strategies with Jen Abel
+Host: Jason Lemkin
+Date: 2025-11-15
+
+Overview: Jen Abel, co-founder of Jellyfish, shares battle-tested strategies for breaking into enterprise sales as an early-stage startup. She emphasizes selling vision over features and targeting tier-one logos from day one.
+
+Key Discussion Points:
+• Focus on tier-one Fortune 1000 companies early, as they have resources and willingness to take calculated risks
+• Sell the future opportunity and strategic advantage, not just feature solutions to current problems
+• Start with $75K-$150K deals and include services to build trust before scaling
+• Build deep relationships through consistent value and immediate responsiveness
+• Hire enterprise sales reps who can "cosplay the founder" and sell the vision
 
 COMPLETE TRANSCRIPT:
 {transcript_text}
@@ -145,7 +177,7 @@ Executive Summary:"""
         
         # 2. Key Themes
         console.print("  🎯 Extracting key themes...")
-        themes_prompt = f"""You are analyzing a complete podcast transcript. Identify 3-8 key themes or topics discussed in this episode.
+        themes_prompt = f"""You are analyzing a complete podcast transcript. Identify 5-10 key themes or topics discussed in this episode.
 
 CRITICAL INSTRUCTIONS FOR ACCURACY:
 - Only identify themes that are ACTUALLY discussed in the transcript
@@ -156,90 +188,169 @@ CRITICAL INSTRUCTIONS FOR ACCURACY:
 Focus on the most important and recurring themes throughout the conversation.
 
 FORMATTING REQUIREMENTS:
+- PLAIN TEXT ONLY - No asterisks, no markdown, no bold markers
 - Number each theme (1., 2., 3., etc.)
 - Add a blank line between each theme for readability
-- Format as: **Theme Title**: Brief explanation
+- Format as: Number. Theme Title — Brief explanation
 
 Example format:
-1. **Theme Title Here**: Explanation of the theme with context from the conversation.
+1. Vision-Based Selling — Explanation of the theme with context from the conversation.
 
-2. **Another Theme**: Explanation with specific examples.
+2. Enterprise Sales Strategy — Explanation with specific examples.
+
+3. Initial Price Settings — Another theme explanation here.
 
 COMPLETE TRANSCRIPT:
 {transcript_text}
 
-Key Themes (3-8):"""
+Key Themes (5-10):"""
         
         summary_data["key_themes"] = self._call_ollama(themes_prompt)
         
         # 3. Notable Quotes
         console.print("  💬 Finding notable quotes...")
-        quotes_prompt = f"""You are analyzing a complete podcast transcript. Extract up to 10 of the most insightful, memorable, or impactful quotes from this transcript.
+        quotes_prompt = f"""You are analyzing a complete podcast transcript. Extract 5-15 of the most insightful, memorable, or impactful quotes.
 
 CRITICAL INSTRUCTIONS FOR ACCURACY:
 - Extract ONLY quotes that appear VERBATIM in the transcript
+- Before including a quote, internally confirm it's an EXACT substring of the transcript
 - Do NOT paraphrase, summarize, or modify the quotes in any way
-- Copy the EXACT words from the transcript
+- Include COMPLETE thoughts - don't truncate mid-sentence or use small snippets
+- Quotes should be 1-4 sentences long (not just fragments or phrases)
 - If you're unsure about the exact wording, do not include that quote
 
-Focus on quotes that:
-- Sparked a longer or deeper discussion
-- Represent key insights or turning points in the conversation
-- Are particularly memorable or thought-provoking
+QUALITY FILTER - Every quote must score high (0-5 scale):
+For each candidate quote, internally score it on:
+- Specificity (0-5): Does it contain concrete examples, numbers, named entities, or frameworks?
+- Actionability (0-5): Does it tell how to do/decide something?
+- Novelty/Insight (0-5): Is it non-obvious or counterintuitive?
+
+Only include quotes where the average score is ≥ 4. If fewer than 5 quotes pass, that's fine - never pad with weak content.
+
+SPECIFICITY REQUIREMENT - A quote must contain at least ONE of:
+- A concrete example or case study
+- A named entity (person, company, technique)
+- A number or quantifiable metric
+- A causal claim ("because", "so that", "if-then")
+- A framework or specific steps
+
+DO NOT include quotes that are:
+- Generic platitudes without examples ("cut through the noise", "don't be afraid to ask", "be different")
+- Pure praise or name-dropping without insight (e.g., "Jason Lemkin is awesome")
+- Simple factual statements or introductions (e.g., "X is the founder of Y company")
+- Unanswered questions, transitions, or filler
+- Anecdotes that don't generalize into a principle
+
+NEGATIVE EXAMPLES (never include quotes like these):
+- "You can't be afraid to ask the hard questions."
+- "It's all about cutting through the noise."
+- "Jen Abel is the co-founder of Jellyfish."
+- "Don't be better, be different."
+
+THEME COVERAGE:
+- Capture 3-6 distinct themes from the episode
+- Include maximum 3 quotes per theme
+- Prefer guest insights over host summaries
 
 FORMATTING REQUIREMENTS:
+- PLAIN TEXT ONLY - No asterisks, no markdown, no bold markers
 - Number each quote (1., 2., 3., etc.)
 - Add a blank line between each quote for readability
-- Format as: Quote in quotation marks, followed by context on a new line
+- Format as: Number. "Quote text" — Context explanation (when needed)
 
-Example format:
-1. "The exact quote word-for-word from the transcript."
-   Context: What was being discussed, who said it, and why it mattered.
+For CONTEXT - every quote must pass this 4-question test:
+Would a reader who didn't hear the podcast understand:
+1. What situation/topic is being discussed?
+2. What all the references mean (no vague "they", "that", "this")?
+3. WHY this quote is valuable or notable?
+4. HOW to apply this in practice?
 
-2. "Another exact quote from the conversation."
-   Context: The situation and significance of this quote.
+If the answer to ANY of these is NO, you MUST add context.
+
+Add context when:
+  * The quote contains ANY vague words: "they", "that", "this", "those", "it", "them" that refer to things outside the quote
+  * Terms are ambiguous or could mean different things
+  * The situation or topic being discussed isn't stated
+  * The WHY (why this matters) isn't obvious
+  * The HOW (how to apply) isn't clear
+  * References a technique, person, or concept without naming it
+
+When adding context (2-4 sentences):
+1. State what was being discussed
+2. Clarify ALL vague references with specifics (resolve pronouns with actual nouns from transcript)
+3. Explain WHY this quote is notable/valuable
+4. Add practical HOW - when/how to apply this
+
+POSITIVE EXAMPLE (quote with high score):
+1. "We killed 9 pilots to get 1 that scaled because the success metric was 10x cheaper CAC within 60 days." — Discussing how to evaluate early customer pilots. The speaker's rule was to set falsifiable metrics (like CAC reduction) with strict timebox before starting any pilot. This matters because it prevents "zombie pilots" that drag on without proving value. In practice, define numeric success criteria and timeline (e.g., activation rate within N days) before greenlighting any pilot.
+
+EXAMPLE (quote needing context - vague references):
+2. "If they know they can call on you, people will turn over rocks for you." — This was about building trust in sales relationships. "They" = potential customers, "call on you" = reliably get help solving their problems even before closing a deal. The insight is that being genuinely helpful (not just pitching) earns reciprocity—customers will actively champion you internally. In practice, this means offering value upfront without demanding commitment.
+
+EXAMPLE (self-contained quote needing no context):
+3. "The best enterprise deals close in 3-6 months. If you're past 9 months, you're probably not getting it—your champion left or the budget shifted."
+
+Note: Use plain text formatting for better readability. Do not use asterisks or bold markers anywhere.
 
 COMPLETE TRANSCRIPT:
 {transcript_text}
 
-Notable Quotes (up to 10):"""
+Notable Quotes (5-15):"""
         
         summary_data["notable_quotes"] = self._call_ollama(quotes_prompt)
         
         # 4. Actionable Insights
         console.print("  💡 Generating actionable insights...")
-        insights_prompt = f"""You are analyzing a complete podcast transcript. Extract 4-10 actionable takeaways or insights that a listener could implement in their life.
+        insights_prompt = f"""You are analyzing a complete podcast transcript. Extract 5-10 actionable takeaways or insights that a listener could implement in their life.
 
 CRITICAL INSTRUCTIONS FOR ACCURACY:
 - Only extract insights that are EXPLICITLY mentioned or clearly implied in the transcript
 - Do NOT invent, embellish, or add your own interpretations
+- Do NOT create numbered steps unless the podcast EXPLICITLY outlined those steps
 - If a specific technique, phrase, or practice is mentioned, quote it EXACTLY as said
-- When describing how to do something, use the EXACT language and steps from the conversation
+- When describing how to do something, use the EXACT language from the conversation
 - If you're unsure about a detail, skip that insight rather than guessing
 - Verify each insight against the transcript before including it
 
 FORMATTING REQUIREMENTS:
+- PLAIN TEXT ONLY - No asterisks, no markdown, no bold markers
 - Number each insight (1., 2., 3., etc.)
 - Add a blank line between each insight for readability
-- Format as: **Insight Title**: Explanation with actionable steps
+- Format as: Number. Title — Explanation in a single paragraph
 
-Focus on insights that fall into these categories (but don't limit yourself to only these):
+Example format WITHOUT steps:
+1. Vision Casting Instead of Problem Solving — Instead of focusing on the technical problem, sell the opportunity for future growth and value. For instance, if you're selling Cursor to a company, emphasize how it will help them hire top-tier engineers, giving them an edge over competitors. This reframes the conversation from solving today's problem to enabling tomorrow's advantage.
 
-1. **Behaviors & Routines**: Daily habits, rituals, or practices someone could adopt
-2. **Mindset Shifts**: Ways to reframe thoughts, feelings, or beliefs
-3. **Specific Actions**: Concrete steps or actions someone could take immediately or over time
-4. **Joy & Distinction**: Actions or behaviors that bring joy, fulfillment, or make someone stand out
-5. **Communication Skills**: Examples of skillfully navigating conversations or interactions with others
-6. **Decision-Making Frameworks**: Mental models or frameworks for making better decisions
-7. **Relationship Practices**: Ways to improve connections with others
-8. **Self-Awareness Techniques**: Methods for better understanding oneself
-9. **Emotional Regulation**: Techniques for managing stress, anxiety, or difficult emotions
-10. **Productivity Systems**: Time management or workflow strategies mentioned
-11. **Learning Methods**: Ways to learn or develop new skills more effectively
-12. **Physical Practices**: Body-based practices (breathing, movement, posture) that affect mental state
-13. **Boundary Setting**: How to set healthy boundaries in work or relationships
-14. **Creativity Techniques**: Methods to enhance creative thinking or problem-solving
-15. **Discomfort Practice**: Ways to intentionally practice being uncomfortable for growth
+2. Focus on Tier One Logos — Jen advises startups to target tier one logos, such as Fortune 1000 companies like Walmart or Tesla. These companies are more likely to take risks and have the resources to ensure successful implementation of your product.
+
+Example format WITH steps (ONLY if podcast explicitly mentioned them):
+3. Initial Pricing Strategy — Start by targeting deals around $75,000 to $150,000.
+   • Set Initial High Value Contracts: Aim for contracts between $75,000 and $150,000
+   • Include Services Initially: Offer services that can be bundled or unbundled later
+   • Gradual Price Increase: Over time, increase ACVs through strategic upselling
+
+WHEN TO INCLUDE SUB-STEPS:
+- ONLY include bullet sub-steps if the speaker EXPLICITLY outlined specific steps in the podcast
+- If the podcast just described a general approach without listing steps, do NOT create sub-steps
+- Do NOT synthesize or infer steps that weren't explicitly mentioned
+
+        Focus on insights that fall into these categories (but don't limit yourself to only these):
+
+1. Behaviors & Routines: Daily habits, rituals, or practices someone could adopt
+2. Mindset Shifts: Ways to reframe thoughts, feelings, or beliefs
+3. Specific Actions: Concrete steps or actions someone could take immediately or over time
+4. Joy & Distinction: Actions or behaviors that bring joy, fulfillment, or make someone stand out
+5. Communication Skills: Examples of skillfully navigating conversations or interactions with others
+6. Decision-Making Frameworks: Mental models or frameworks for making better decisions
+7. Relationship Practices: Ways to improve connections with others
+8. Self-Awareness Techniques: Methods for better understanding oneself
+9. Emotional Regulation: Techniques for managing stress, anxiety, or difficult emotions
+10. Productivity Systems: Time management or workflow strategies mentioned
+11. Learning Methods: Ways to learn or develop new skills more effectively
+12. Physical Practices: Body-based practices (breathing, movement, posture) that affect mental state
+13. Boundary Setting: How to set healthy boundaries in work or relationships
+14. Creativity Techniques: Methods to enhance creative thinking or problem-solving
+15. Discomfort Practice: Ways to intentionally practice being uncomfortable for growth
 
 For each insight:
 - Be ACCURATE to what was actually said in the conversation
@@ -251,7 +362,7 @@ For each insight:
 COMPLETE TRANSCRIPT:
 {transcript_text}
 
-Actionable Insights (4-10):"""
+Actionable Insights (5-10):"""
         
         summary_data["actionable_insights"] = self._call_ollama(insights_prompt)
         

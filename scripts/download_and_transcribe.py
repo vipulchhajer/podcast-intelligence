@@ -77,10 +77,11 @@ def main():
             episode.guid
         )
         
+        choice = None  # Initialize choice variable
+        
         if already_exists:
             console.print(f"\n[yellow]⚠ Episode already processed![/yellow]")
             console.print(f"[yellow]  Location: {output_dir}[/yellow]")
-            console.print(f"[yellow]  Delete this folder to re-process the episode.[/yellow]")
             
             # Show what's already there
             audio_path = output_dir / "audio.mp3"
@@ -89,60 +90,153 @@ def main():
             summary_path = output_dir / "summary.txt"
             
             console.print(f"\n[bold cyan]Existing files:[/bold cyan]")
-            if audio_path.exists():
+            has_audio = audio_path.exists()
+            has_transcript = text_path.exists()
+            has_summary = summary_path.exists()
+            
+            if has_audio:
                 console.print(f"  ✓ Audio: {audio_path}")
-            if text_path.exists():
+            if has_transcript:
                 console.print(f"  ✓ Transcript: {text_path}")
             if json_path.exists():
                 console.print(f"  ✓ JSON: {json_path}")
-            if summary_path.exists():
+            if has_summary:
                 console.print(f"  ✓ Summary: {summary_path}")
             
-            sys.exit(0)
+            # Interactive prompt for what to do
+            console.print(f"\n[bold]What would you like to do?[/bold]")
+            console.print("  [1] Skip (do nothing)")
+            console.print("  [2] Re-download everything (fresh start)")
+            
+            if has_transcript:
+                console.print("  [3] Re-summarize only (keep existing transcript)")
+            if has_audio:
+                console.print("  [4] Re-transcribe and re-summarize (keep audio)")
+            
+            import click
+            choice = click.prompt(
+                "\nYour choice",
+                type=click.Choice(['1', '2', '3', '4'] if has_transcript and has_audio else 
+                                 ['1', '2', '3'] if has_transcript else 
+                                 ['1', '2', '4'] if has_audio else 
+                                 ['1', '2']),
+                default='1'
+            )
+            
+            if choice == '1':
+                console.print("[dim]Skipping. Episode unchanged.[/dim]")
+                sys.exit(0)
+            elif choice == '2':
+                console.print("[yellow]🔄 Re-downloading everything...[/yellow]")
+                # Delete existing directory and continue
+                import shutil
+                shutil.rmtree(output_dir)
+                output_dir.mkdir(parents=True, exist_ok=True)
+            elif choice == '3' and has_transcript:
+                console.print("[yellow]🔄 Re-summarizing only...[/yellow]")
+                # Jump straight to summarization
+                import json
+                transcript_text = text_path.read_text()
+                metadata = json.loads((output_dir / "metadata.json").read_text())
+                
+                console.print(f"\n[bold blue]Generating Summary[/bold blue]")
+                console.print("[dim]Using Ollama to analyze transcript...[/dim]")
+                
+                summarizer = PodcastSummarizer()
+                summary = summarizer.summarize(
+                    transcript_text=transcript_text,
+                    podcast_name=metadata.get("podcast", "Unknown"),
+                    episode_title=metadata.get("episode_title", "Unknown"),
+                    host=metadata.get("author", "Unknown"),
+                    published_date=metadata.get("published", "Unknown")[:10]
+                )
+                
+                # Save summary
+                summarizer.save_summary(summary, output_dir)
+                
+                # Display summary
+                console.print("\n" + "="*60)
+                console.print("[bold cyan]SUMMARY GENERATED[/bold cyan]")
+                console.print("="*60)
+                summarizer.display_summary(summary)
+                
+                console.print("\n[bold green]✓ Complete![/bold green]")
+                console.print(f"  🤖 Summary: {summary_path}")
+                sys.exit(0)
+            elif choice == '4' and has_audio:
+                console.print("[yellow]🔄 Re-transcribing and re-summarizing...[/yellow]")
+                # Skip download, jump to transcription
+                # Load existing metadata
+                import json
+                metadata = json.loads((output_dir / "metadata.json").read_text())
+                
+                # Re-transcribe
+                console.print(f"\n[bold blue]Step 3: Transcribing[/bold blue]")
+                console.print("[dim]This will take a few minutes...[/dim]")
+                
+                transcriber = Transcriber(model_name="mlx-community/whisper-large-v3-turbo")
+                result = transcriber.transcribe(audio_path, language="en", word_timestamps=True)
+                
+                # Save transcript
+                text_path, json_path = transcriber.save_transcript(result, output_dir)
+                
+                # Jump to summarization (skip download section)
+            else:
+                console.print("[red]Invalid choice. Exiting.[/red]")
+                sys.exit(1)
+        else:
+            # Create new directory
+            output_dir.mkdir(parents=True, exist_ok=True)
+            console.print(f"\n[dim]📁 Output directory: {output_dir}[/dim]")
+            
+            # Download audio
+            console.print(f"\n[bold blue]Step 2: Downloading Audio[/bold blue]")
+            audio_path = output_dir / "audio.mp3"
+            
+            downloader = AudioDownloader()
+            audio_path = downloader.download(episode.audio_url, audio_path)
+            
+            # Transcribe
+            console.print(f"\n[bold blue]Step 3: Transcribing[/bold blue]")
+            console.print("[dim]This will take a few minutes...[/dim]")
+            
+            transcriber = Transcriber(model_name="mlx-community/whisper-large-v3-turbo")
+            result = transcriber.transcribe(audio_path, language="en", word_timestamps=True)
+            
+            # Save transcript
+            text_path, json_path = transcriber.save_transcript(result, output_dir)
         
-        # Create new directory
-        output_dir.mkdir(parents=True, exist_ok=True)
-        console.print(f"\n[dim]📁 Output directory: {output_dir}[/dim]")
-        
-        # Download audio
-        console.print(f"\n[bold blue]Step 2: Downloading Audio[/bold blue]")
-        audio_path = output_dir / "audio.mp3"
-        
-        downloader = AudioDownloader()
-        audio_path = downloader.download(episode.audio_url, audio_path)
-        
-        # Transcribe
-        console.print(f"\n[bold blue]Step 3: Transcribing[/bold blue]")
-        console.print("[dim]This will take a few minutes...[/dim]")
-        
-        transcriber = Transcriber(model_name="mlx-community/whisper-large-v3-turbo")
-        result = transcriber.transcribe(audio_path, language="en", word_timestamps=True)
-        
-        # Save transcript
-        text_path, json_path = transcriber.save_transcript(result, output_dir)
-        
-        # Save episode metadata
+        # Save episode metadata (only if not already exists or choice 2)
         import json
-        metadata = {
-            "podcast": podcast_info.title,
-            "episode_title": episode.title,
-            "published": episode.published.isoformat(),
-            "duration": episode.duration,
-            "audio_url": episode.audio_url,
-            "guid": episode.guid,
-            "author": podcast_info.author,
-        }
-        metadata_path = output_dir / "metadata.json"
-        metadata_path.write_text(json.dumps(metadata, indent=2))
-        console.print(f"💾 Saved metadata: {metadata_path}")
+        if not already_exists or choice == '2':
+            metadata = {
+                "podcast": podcast_info.title,
+                "episode_title": episode.title,
+                "published": episode.published.isoformat(),
+                "duration": episode.duration,
+                "audio_url": episode.audio_url,
+                "guid": episode.guid,
+                "author": podcast_info.author,
+            }
+            metadata_path = output_dir / "metadata.json"
+            metadata_path.write_text(json.dumps(metadata, indent=2))
+            console.print(f"💾 Saved metadata: {metadata_path}")
         
         # Summarize
         console.print(f"\n[bold blue]Step 4: Generating Summary[/bold blue]")
         console.print("[dim]Using Ollama to analyze transcript...[/dim]")
         
+        # Get transcript text
+        if 'result' in locals():
+            transcript_text = result["text"]
+        else:
+            # Load from existing file
+            text_path = output_dir / "transcript.txt"
+            transcript_text = text_path.read_text()
+        
         summarizer = PodcastSummarizer()
         summary = summarizer.summarize(
-            transcript_text=result["text"],
+            transcript_text=transcript_text,
             podcast_name=podcast_info.title,
             episode_title=episode.title,
             host=podcast_info.author,
@@ -161,9 +255,9 @@ def main():
         # Display transcript preview
         console.print("\n" + "="*60)
         
-        word_count = len(result["text"].split())
-        preview_text = result["text"][:500]
-        if len(result["text"]) > 500:
+        word_count = len(transcript_text.split())
+        preview_text = transcript_text[:500]
+        if len(transcript_text) > 500:
             preview_text += "..."
         
         console.print(Panel(

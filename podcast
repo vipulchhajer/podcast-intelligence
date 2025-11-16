@@ -41,6 +41,68 @@ def resolve_feed_url(name_or_url):
     return name_or_url
 
 
+def get_recent_episodes(limit=10):
+    """Get list of recently processed episodes."""
+    episodes_dir = Path("output") / "episodes"
+    
+    if not episodes_dir.exists():
+        return []
+    
+    # Get all episode directories with their modification times
+    episode_dirs = []
+    for podcast_dir in episodes_dir.iterdir():
+        if not podcast_dir.is_dir():
+            continue
+        for episode_dir in podcast_dir.iterdir():
+            if not episode_dir.is_dir():
+                continue
+            
+            # Get metadata for better display
+            metadata_path = episode_dir / "metadata.json"
+            if metadata_path.exists():
+                try:
+                    import json
+                    metadata = json.loads(metadata_path.read_text())
+                    episode_dirs.append({
+                        "path": str(episode_dir),
+                        "podcast": metadata.get("podcast", "Unknown"),
+                        "episode": metadata.get("episode_title", "Unknown"),
+                        "date": metadata.get("published", "Unknown"),
+                        "mtime": episode_dir.stat().st_mtime
+                    })
+                except:
+                    pass
+    
+    # Sort by modification time (most recent first)
+    episode_dirs.sort(key=lambda x: x["mtime"], reverse=True)
+    return episode_dirs[:limit]
+
+
+def resolve_episode_ref(episode_ref):
+    """
+    Resolve episode reference to a path.
+    Can be:
+    - A number (1-10) referring to recent episodes
+    - A full path
+    
+    Returns the episode directory path.
+    """
+    # Check if it's a number
+    if episode_ref.isdigit():
+        episode_num = int(episode_ref)
+        recent = get_recent_episodes(limit=10)
+        
+        if episode_num < 1 or episode_num > len(recent):
+            console.print(f"[red]✗ Episode number {episode_num} not found.[/red]")
+            console.print(f"[yellow]💡 Run './podcast recent' to see available episodes (1-{len(recent)})[/yellow]")
+            sys.exit(1)
+        
+        return recent[episode_num - 1]["path"]
+    else:
+        # It's a path
+        return episode_ref
+
+
 @click.group()
 @click.version_option(version="0.1.0")
 def cli():
@@ -57,14 +119,115 @@ def cli():
 @click.option('--limit', '-l', default=20, help='Number of episodes to show')
 def list(feed_name_or_url, limit):
     """
-    List episodes from a podcast RSS feed.
+    List episodes from a podcast RSS feed with status indicators.
     
     FEED_NAME_OR_URL: Saved feed name (e.g., "10-happier") or full RSS URL
     """
     rss_url = resolve_feed_url(feed_name_or_url)
-    from scripts.list_episodes import main as list_main
-    sys.argv = ['list_episodes.py', rss_url, '--limit', str(limit)]
-    list_main()
+    
+    # Import necessary modules
+    from podcast_intelligence.rss_parser import RSSParser
+    from podcast_intelligence.storage import get_episode_directory
+    
+    console.print(f"[bold cyan]📡 Fetching episodes from feed...[/bold cyan]")
+    
+    try:
+        # Parse RSS feed
+        podcast_info, episodes = RSSParser.parse_feed(rss_url)
+        
+        console.print(f"[green]✓ Found {len(episodes)} episodes in '{podcast_info.title}'[/green]\n")
+        
+        # Limit episodes
+        episodes_to_show = episodes[:limit]
+        
+        # Create table
+        table = Table(
+            title=f"📻 {podcast_info.title}",
+            show_header=True,
+            header_style="bold cyan"
+        )
+        table.add_column("#", style="dim", width=4)
+        table.add_column("Status", width=12)
+        table.add_column("Title", style="white", width=50)
+        table.add_column("Date", style="yellow", width=12)
+        table.add_column("Duration", style="dim", width=10)
+        
+        base_dir = Path("output") / "episodes"
+        
+        for idx, episode in enumerate(episodes_to_show):
+            # Check if episode exists
+            episode_dir, exists = get_episode_directory(
+                base_dir,
+                podcast_info.title,
+                episode.title,
+                episode.published,
+                episode.guid,
+                check_existing=True
+            )
+            
+            # Determine status
+            if exists:
+                has_audio = (episode_dir / "audio.mp3").exists()
+                has_transcript = (episode_dir / "transcript.txt").exists()
+                has_summary = (episode_dir / "summary.txt").exists()
+                
+                if has_summary:
+                    # Check prompt version
+                    summary_json = episode_dir / "summary.json"
+                    if summary_json.exists():
+                        try:
+                            import json
+                            from podcast_intelligence.summarizer import PROMPT_VERSION
+                            summary_data = json.loads(summary_json.read_text())
+                            saved_version = summary_data.get("metadata", {}).get("prompt_version", "1.0")
+                            
+                            if saved_version != PROMPT_VERSION:
+                                status = "[yellow]⚠ Outdated[/yellow]"
+                            else:
+                                status = "[green]✓ Complete[/green]"
+                        except:
+                            status = "[green]✓ Complete[/green]"
+                    else:
+                        status = "[green]✓ Complete[/green]"
+                elif has_transcript:
+                    status = "[yellow]⚠ No Summary[/yellow]"
+                elif has_audio:
+                    status = "[yellow]⚠ Downloaded[/yellow]"
+                else:
+                    status = "[blue]◐ Partial[/blue]"
+            else:
+                status = "[dim]○ New[/dim]"
+            
+            # Truncate title if too long
+            display_title = episode.title[:47] + "..." if len(episode.title) > 50 else episode.title
+            
+            table.add_row(
+                str(idx),
+                status,
+                display_title,
+                episode.published.strftime('%Y-%m-%d'),
+                episode.duration_formatted
+            )
+        
+        console.print(table)
+        
+        # Show legend
+        console.print("\n[bold]Status Legend:[/bold]")
+        console.print("  [green]✓ Complete[/green]    - Downloaded, transcribed, and summarized (latest prompts)")
+        console.print("  [yellow]⚠ Outdated[/yellow]   - Summary exists but uses old prompts (needs re-summarization)")
+        console.print("  [yellow]⚠ No Summary[/yellow] - Downloaded and transcribed (needs summary)")
+        console.print("  [yellow]⚠ Downloaded[/yellow] - Audio only (needs transcription)")
+        console.print("  [blue]◐ Partial[/blue]     - Partially downloaded")
+        console.print("  [dim]○ New[/dim]         - Not yet processed")
+        
+        console.print(f"\n[dim]💡 To process: ./podcast process {feed_name_or_url} <episode_number>[/dim]")
+        
+        if len(episodes) > limit:
+            console.print(f"[dim]Showing {limit} of {len(episodes)} episodes. Use --limit to see more.[/dim]")
+    
+    except Exception as e:
+        console.print(f"[red]✗ Error: {e}[/red]")
+        sys.exit(1)
 
 
 @cli.command()
@@ -84,12 +247,166 @@ def process(feed_name_or_url, episode_number):
 
 
 @cli.command()
-@click.argument('episode_dir', type=click.Path(exists=True))
-def resummarize(episode_dir):
-    """Re-summarize an existing episode with updated prompts."""
+@click.argument('episode_ref', required=False)
+def resummarize(episode_ref):
+    """
+    Re-summarize an existing episode with updated prompts.
+    
+    EPISODE_REF: Episode number (1-10 from recent list) or full directory path
+    
+    Examples:
+      ./podcast resummarize 1          # Re-summarize first episode from recent list
+      ./podcast resummarize output/episodes/...  # Use full path
+    """
+    if not episode_ref:
+        # Show recent episodes to help user choose
+        console.print("[yellow]💡 No episode specified. Here are your recent episodes:[/yellow]\n")
+        episode_dirs = get_recent_episodes(limit=10)
+        
+        if not episode_dirs:
+            console.print("[red]No episodes found.[/red]")
+            console.print("[dim]Process an episode first with: ./podcast process <feed> <episode>[/dim]")
+            sys.exit(1)
+        
+        table = Table(title="🕐 Recently Processed Episodes", show_header=True, header_style="bold cyan")
+        table.add_column("#", style="dim", width=3)
+        table.add_column("Status", width=12)
+        table.add_column("Podcast", style="yellow", width=25)
+        table.add_column("Episode", style="white", width=35)
+        
+        # Import here to get current version
+        from podcast_intelligence.summarizer import PROMPT_VERSION
+        
+        for idx, ep in enumerate(episode_dirs, 1):
+            # Check prompt version
+            episode_path = Path(ep["path"])
+            summary_json = episode_path / "summary.json"
+            status = "[dim]?[/dim]"
+            
+            if summary_json.exists():
+                try:
+                    import json
+                    summary_data = json.loads(summary_json.read_text())
+                    saved_version = summary_data.get("metadata", {}).get("prompt_version", "1.0")
+                    
+                    if saved_version == PROMPT_VERSION:
+                        status = "[green]✓ Latest[/green]"
+                    else:
+                        status = f"[yellow]v{saved_version}[/yellow]"
+                except:
+                    status = "[dim]Unknown[/dim]"
+            
+            table.add_row(
+                str(idx),
+                status,
+                ep["podcast"][:25],
+                ep["episode"][:35]
+            )
+        
+        console.print(table)
+        console.print(f"\n[dim]Current prompt version: v{PROMPT_VERSION}[/dim]")
+        console.print("\n[bold]Run:[/bold] [cyan]./podcast resummarize <number>[/cyan]")
+        console.print("[dim]Example: ./podcast resummarize 1[/dim]")
+        sys.exit(0)
+    
+    episode_dir = resolve_episode_ref(episode_ref)
     from scripts.resummarize import main as resummarize_main
     sys.argv = ['resummarize.py', episode_dir]
     resummarize_main()
+
+
+@cli.command()
+@click.argument('episode_ref', required=False)
+@click.option('--json', 'show_json', is_flag=True, help='Show raw JSON instead of formatted text')
+def view(episode_ref, show_json):
+    """
+    View the summary for an existing episode.
+    
+    EPISODE_REF: Episode number (1-10 from recent list) or full directory path
+    
+    Examples:
+      ./podcast view 1          # View first episode from recent list
+      ./podcast view output/episodes/...  # Use full path
+    """
+    if not episode_ref:
+        # Show recent episodes to help user choose
+        console.print("[yellow]💡 No episode specified. Here are your recent episodes:[/yellow]\n")
+        episode_dirs = get_recent_episodes(limit=10)
+        
+        if not episode_dirs:
+            console.print("[red]No episodes found.[/red]")
+            console.print("[dim]Process an episode first with: ./podcast process <feed> <episode>[/dim]")
+            sys.exit(1)
+        
+        table = Table(title="🕐 Recently Processed Episodes", show_header=True, header_style="bold cyan")
+        table.add_column("#", style="dim", width=3)
+        table.add_column("Status", width=12)
+        table.add_column("Podcast", style="yellow", width=25)
+        table.add_column("Episode", style="white", width=35)
+        
+        # Import here to get current version
+        from podcast_intelligence.summarizer import PROMPT_VERSION
+        
+        for idx, ep in enumerate(episode_dirs, 1):
+            # Check prompt version
+            episode_path = Path(ep["path"])
+            summary_json = episode_path / "summary.json"
+            status = "[dim]?[/dim]"
+            
+            if summary_json.exists():
+                try:
+                    import json
+                    summary_data = json.loads(summary_json.read_text())
+                    saved_version = summary_data.get("metadata", {}).get("prompt_version", "1.0")
+                    
+                    if saved_version == PROMPT_VERSION:
+                        status = "[green]✓ Latest[/green]"
+                    else:
+                        status = f"[yellow]v{saved_version}[/yellow]"
+                except:
+                    status = "[dim]Unknown[/dim]"
+            
+            table.add_row(
+                str(idx),
+                status,
+                ep["podcast"][:25],
+                ep["episode"][:35]
+            )
+        
+        console.print(table)
+        console.print(f"\n[dim]Current prompt version: v{PROMPT_VERSION}[/dim]")
+        console.print("\n[bold]Run:[/bold] [cyan]./podcast view <number>[/cyan]")
+        console.print("[dim]Example: ./podcast view 1[/dim]")
+        sys.exit(0)
+    
+    episode_dir = resolve_episode_ref(episode_ref)
+    episode_path = Path(episode_dir)
+    
+    # Check for summary files
+    summary_txt = episode_path / "summary.txt"
+    summary_json = episode_path / "summary.json"
+    
+    if show_json:
+        if not summary_json.exists():
+            console.print(f"[red]✗ No summary.json found in {episode_dir}[/red]")
+            sys.exit(1)
+        
+        import json
+        summary_data = json.loads(summary_json.read_text())
+        console.print_json(data=summary_data)
+    else:
+        if not summary_txt.exists():
+            console.print(f"[red]✗ No summary.txt found in {episode_dir}[/red]")
+            console.print("[yellow]💡 Try running: ./podcast process <feed> <episode>[/yellow]")
+            sys.exit(1)
+        
+        # Display the formatted summary
+        summary_text = summary_txt.read_text()
+        console.print(summary_text)
+        
+        console.print("\n" + "="*80)
+        console.print(f"[dim]📁 Episode: {episode_dir}[/dim]")
+        console.print(f"[dim]📄 Full summary: {summary_txt}[/dim]")
 
 
 @cli.group()
@@ -160,43 +477,11 @@ def feed_remove(name):
 @cli.command()
 @click.option('--limit', '-l', default=10, help='Number of recent episodes to show')
 def recent(limit):
-    """Show recently processed episodes (for easy resummarization)."""
-    episodes_dir = Path("output") / "episodes"
-    
-    if not episodes_dir.exists():
-        console.print("[yellow]No episodes processed yet.[/yellow]")
-        return
-    
-    # Get all episode directories with their modification times
-    episode_dirs = []
-    for podcast_dir in episodes_dir.iterdir():
-        if not podcast_dir.is_dir():
-            continue
-        for episode_dir in podcast_dir.iterdir():
-            if not episode_dir.is_dir():
-                continue
-            
-            # Get metadata for better display
-            metadata_path = episode_dir / "metadata.json"
-            if metadata_path.exists():
-                try:
-                    metadata = json.loads(metadata_path.read_text())
-                    episode_dirs.append({
-                        "path": str(episode_dir),
-                        "podcast": metadata.get("podcast", "Unknown"),
-                        "episode": metadata.get("episode_title", "Unknown"),
-                        "date": metadata.get("published", "Unknown"),
-                        "mtime": episode_dir.stat().st_mtime
-                    })
-                except:
-                    pass
-    
-    # Sort by modification time (most recent first)
-    episode_dirs.sort(key=lambda x: x["mtime"], reverse=True)
-    episode_dirs = episode_dirs[:limit]
+    """Show recently processed episodes (for easy viewing/resummarization)."""
+    episode_dirs = get_recent_episodes(limit=limit)
     
     if not episode_dirs:
-        console.print("[yellow]No episodes found.[/yellow]")
+        console.print("[yellow]No episodes processed yet.[/yellow]")
         return
     
     table = Table(title="🕐 Recently Processed Episodes", show_header=True, header_style="bold cyan")
@@ -212,9 +497,14 @@ def recent(limit):
         )
     
     console.print(table)
-    console.print("\n[bold]To re-summarize an episode:[/bold]")
+    console.print("\n[bold]Quick Commands:[/bold]")
+    console.print("[dim]Use episode numbers (1-10) instead of long paths![/dim]\n")
+    console.print("  [cyan]./podcast view 1[/cyan]        # View summary for episode #1")
+    console.print("  [cyan]./podcast resummarize 1[/cyan] # Re-summarize episode #1")
+    console.print("\n[dim]Or see specific commands for each:[/dim]\n")
+    
     for idx, ep in enumerate(episode_dirs, 1):
-        console.print(f"  [dim]{idx}.[/dim] ./podcast resummarize \"{ep['path']}\"")
+        console.print(f"  [dim]{idx}.[/dim] view: [cyan]./podcast view {idx}[/cyan]  |  resummarize: [cyan]./podcast resummarize {idx}[/cyan]")
 
 
 @cli.command()
@@ -320,8 +610,12 @@ def commands():
         "Show recently processed episodes"
     )
     table.add_row(
-        "podcast resummarize <dir>",
-        "Re-generate summary"
+        "podcast resummarize <#|dir>",
+        "Re-generate summary (use episode #)"
+    )
+    table.add_row(
+        "podcast view <#|dir>",
+        "View existing summary (use episode #)"
     )
     table.add_row(
         "",
@@ -349,7 +643,9 @@ def commands():
     )
     
     console.print(table)
-    console.print("\n[dim]💡 Tip: <feed> can be a saved feed name or full RSS URL[/dim]")
+    console.print("\n[dim]💡 Tips:[/dim]")
+    console.print("[dim]  • <feed> can be a saved feed name or full RSS URL[/dim]")
+    console.print("[dim]  • <#|dir> means you can use episode numbers (1-10) from 'recent' OR full paths[/dim]")
 
 
 if __name__ == '__main__':
