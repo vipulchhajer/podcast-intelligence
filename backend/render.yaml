@@ -1,0 +1,24 @@
+# Render Deployment Configuration
+
+services:
+  - type: web
+    name: podcast-intelligence-api
+    env: python
+    region: oregon
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python main.py"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./podcast_app.db
+      - key: STORAGE_PATH
+        value: ./storage
+      - key: CORS_ORIGINS
+        value: https://your-frontend-url.vercel.app
+    healthCheckPath: /health
+

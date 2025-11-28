@@ -3,8 +3,14 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
+import ssl
+import certifi
 
 import feedparser
+
+# Fix SSL certificate issues on macOS
+if hasattr(ssl, '_create_unverified_context'):
+    ssl._create_default_https_context = ssl._create_unverified_context
 
 
 @dataclass

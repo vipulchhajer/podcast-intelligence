@@ -1,0 +1,15 @@
+# Railway Deployment Configuration
+# For deploying backend to Railway
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "python main.py"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+
+[env]
+PYTHON_VERSION = "3.11"
+PORT = "8000"
+

@@ -37,6 +37,15 @@ class AudioDownloader:
         print(f"   URL: {url}")
         print(f"   Output: {output_path}")
         
+        # Add headers to identify as a legitimate podcast client
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; PodcastApp/1.0; +http://podcast-app.example.com)",
+            "Accept": "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+        }
+        
         with Progress(
             *Progress.get_default_columns(),
             DownloadColumn(),
@@ -44,7 +53,7 @@ class AudioDownloader:
             TimeRemainingColumn(),
         ) as progress:
             
-            with httpx.stream("GET", url, timeout=timeout, follow_redirects=True) as response:
+            with httpx.stream("GET", url, headers=headers, timeout=timeout, follow_redirects=True) as response:
                 response.raise_for_status()
                 
                 total = int(response.headers.get("content-length", 0))
@@ -84,7 +93,14 @@ class AudioDownloader:
         # Check if file exists and get current size
         existing_size = output_path.stat().st_size if output_path.exists() else 0
         
-        headers = {}
+        # Add headers to identify as a legitimate podcast client
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; PodcastApp/1.0; +http://podcast-app.example.com)",
+            "Accept": "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+        }
         if existing_size > 0:
             headers["Range"] = f"bytes={existing_size}-"
             print(f"📂 Resuming download from {existing_size / (1024 * 1024):.1f} MB")

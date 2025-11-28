@@ -9,6 +9,16 @@
       "name": "lennys",
       "url": "https://api.substack.com/feed/podcast/10845.rss",
       "added": "2025-11-15"
+    },
+    "theory": {
+      "name": "theory",
+      "url": "https://feeds.megaphone.fm/TOE4643226064",
+      "added": "2025-11-23"
+    },
+    "gaia": {
+      "name": "gaia",
+      "url": "https://rss.buzzsprout.com/1949910.rss",
+      "added": "2025-11-23"
     }
   }
 }
