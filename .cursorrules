@@ -1,0 +1,176 @@
+# Cursor AI Rules for Podcast Intelligence App
+
+## Project Context
+This is an AI-powered podcast transcription and summarization web app built with:
+- **Backend:** FastAPI (Python), SQLAlchemy, SQLite
+- **Frontend:** React + Vite + Tailwind CSS
+- **AI Services:** Groq API (Whisper for transcription, Llama 3.3 for summarization)
+
+## Critical Files to Reference
+
+### ALWAYS read these files before suggesting code changes:
+1. **DEVELOPMENT.md** - Development guidelines, checklists, and patterns
+2. **frontend/src/hooks/usePolling.js** - Reusable polling hook for status updates
+3. **WEB_APP_README.md** - Architecture and setup documentation
+
+## Mandatory Patterns
+
+### 1. Real-Time Status Updates
+When creating pages that display episode statuses:
+- ✅ MUST use `usePolling` hook from `frontend/src/hooks/usePolling.js`
+- ✅ MUST follow the checklist in DEVELOPMENT.md section "Real-Time Status Updates"
+- ✅ MUST poll every 3 seconds for status changes
+- ✅ MUST support "silent" mode to avoid showing loading spinners during polling
+
+Example:
+```javascript
+import { usePolling } from '../hooks/usePolling'
+usePolling(() => fetchData(true), 3000, [dependencies])
+```
+
+### 2. Status Badges
+ALWAYS use consistent status badge colors:
+- `pending` → yellow
+- `downloading` → blue
+- `transcribing` → indigo
+- `summarizing` → purple
+- `completed` → green
+- `failed` → red
+
+### 3. Mobile Responsiveness
+- ✅ Images MUST use `aspect-square` or responsive sizing
+- ✅ Images MUST include `loading="lazy"`
+- ✅ Images MUST have error handling: `onError={(e) => { e.target.style.display = 'none' }}`
+- ✅ Use Tailwind breakpoints: `sm:`, `md:`, `lg:`, `xl:`
+
+### 4. HTML Content from RSS Feeds
+- ✅ MUST sanitize HTML with `sanitizeHtml()` from `frontend/src/utils/sanitizeHtml.js`
+- ✅ NEVER render raw HTML without sanitization (XSS risk)
+- ❌ NEVER use plain `{description}` for RSS content
+
+Example:
+```jsx
+<div dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }} />
+```
+
+### 5. API Response Format
+When modifying backend endpoints that return episodes:
+- ✅ MUST include: `status`, `error_message`, `id`, `guid`
+- ✅ MUST update status at each processing step
+- ✅ MUST set `error_message` on failures
+
+## Code Style (from user rules)
+
+### JavaScript/React
+- Use functional components (no classes unless necessary)
+- Use camelCase for variables/functions
+- Use PascalCase for components
+- Prefer const over let
+- Use async/await over .then()
+
+### Python
+- Use snake_case for functions/variables
+- Follow PEP 8
+- Use async/await for database operations
+- Always include error handling in background tasks
+
+### File Naming
+- Directories: kebab-case (e.g., `podcast-intelligence/`)
+- React components: PascalCase (e.g., `EpisodeDetail.jsx`)
+- Utilities: camelCase (e.g., `sanitizeHtml.js`)
+- Python modules: snake_case (e.g., `rss_parser.py`)
+
+## Testing Philosophy (MVP Stage)
+
+🚫 DO NOT suggest comprehensive test suites unless explicitly requested.
+
+The app is in MVP stage with:
+- Small user base (friends and family)
+- Fast iteration priority
+- Manual testing sufficient
+
+ONLY suggest tests when user reaches Phase 2 milestones (see DEVELOPMENT.md):
+- 10+ active users
+- Adding team members
+- Monetization
+- Frequent regression bugs
+
+## Common Pitfalls to Avoid
+
+1. ❌ Adding new pages without polling → Always use `usePolling` hook
+2. ❌ Displaying raw HTML from RSS feeds → Always sanitize
+3. ❌ Forgetting mobile responsive images → Use aspect ratios + breakpoints
+4. ❌ Missing error messages on failed episodes → Include in API responses
+5. ❌ Not handling image load failures → Add onError handlers
+6. ❌ Creating custom polling logic → Use the existing hook
+
+## When Making Changes
+
+Before suggesting code:
+1. Check if similar pattern exists in Episodes.jsx or PodcastEpisodes.jsx
+2. Verify it follows DEVELOPMENT.md checklist
+3. Ensure mobile responsiveness
+4. Include proper error handling
+
+## Key Architecture Notes
+
+### Backend Processing Flow
+1. Episode created with status="pending"
+2. Background task starts: status="downloading"
+3. Audio downloaded and compressed if >20MB
+4. If >53 min, split into 20-min chunks
+5. Status="transcribing" → Groq Whisper API
+6. Status="summarizing" → Groq Llama 3.3
+7. Status="completed" with transcript + summary
+
+### Frontend Polling
+- My Episodes page: auto-refreshes every 3s
+- Podcast Episodes page: auto-refreshes every 3s
+- Both use same usePolling hook for consistency
+
+### Current Known Issues (from memory)
+- datetime.utcnow() deprecation warning (line 510 in main.py)
+- No authentication (using mock user_id=1)
+- Background tasks occasionally get stuck in "pending"
+
+## Suggestions Welcome For
+
+✅ UI/UX improvements
+✅ Performance optimizations
+✅ Error handling enhancements
+✅ Mobile experience improvements
+✅ Code refactoring to reduce duplication
+✅ Accessibility improvements
+
+## Suggestions to Avoid
+
+❌ Major architectural changes (unless critical bug)
+❌ Adding authentication (planned for Phase 2)
+❌ Comprehensive test suites (MVP stage)
+❌ Deployment optimization (works locally for now)
+❌ Database migrations to PostgreSQL (SQLite fine for MVP)
+
+## Response Style
+
+When helping with code:
+- Be concise and action-oriented
+- Show code examples, not just explanations
+- Reference DEVELOPMENT.md checklist items when relevant
+- Point out if a pattern already exists to copy
+- Ask clarifying questions if requirements unclear
+- Suggest simple solutions over complex ones (MVP mindset)
+
+## Memory Context
+
+The user has built this app to share with non-technical friends. They value:
+- Fast iteration
+- Working features over perfect code
+- Mobile-friendly design
+- Clear error messages for users
+- Learning good practices without over-engineering
+
+---
+
+**Last Updated:** November 29, 2024
+**Project Stage:** MVP - Local development for small user base
+

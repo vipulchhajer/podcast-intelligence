@@ -20,6 +20,7 @@ from models import User, Podcast, Episode
 from services.groq_service import groq_service
 from podcast_intelligence.rss_parser import RSSParser
 from podcast_intelligence.downloader import AudioDownloader
+from utils.error_formatter import format_error_for_user
 
 
 @asynccontextmanager
@@ -153,6 +154,7 @@ async def add_podcast(
             rss_url=str(podcast_data.rss_url),
             author=podcast_info.author,
             description=podcast_info.description,
+            image_url=podcast_info.image_url,
             slug=slug
         )
         
@@ -166,6 +168,7 @@ async def add_podcast(
                 "id": new_podcast.id,
                 "title": new_podcast.title,
                 "slug": new_podcast.slug,
+                "image_url": new_podcast.image_url,
                 "episode_count": len(episodes)
             }
         }
@@ -190,6 +193,7 @@ async def list_podcasts(db: AsyncSession = Depends(get_db)):
                 "title": p.title,
                 "slug": p.slug,
                 "rss_url": p.rss_url,
+                "image_url": p.image_url,
                 "created_at": p.created_at
             }
             for p in podcasts
@@ -236,13 +240,17 @@ async def list_podcast_episodes(
                 "duration": ep.duration,
                 "duration_formatted": ep.duration_formatted,
                 "status": processed.status if processed else "new",
+                "error_message": processed.error_message if processed else None,
                 "id": processed.id if processed else None
             })
         
         return {
             "podcast": {
                 "id": podcast.id,
-                "title": podcast.title
+                "title": podcast.title,
+                "author": podcast.author,
+                "image_url": podcast.image_url,
+                "slug": podcast.slug
             },
             "episodes": episode_list
         }
@@ -513,11 +521,13 @@ async def process_episode_background(episode_id: int, podcast_slug: str, episode
             print(f"✓ Episode {episode_id} processed successfully")
         
         except Exception as e:
-            # Update status: failed with error message
+            # Update status: failed with user-friendly error message
             episode.status = "failed"
-            episode.error_message = str(e)
+            raw_error = str(e)
+            episode.error_message = format_error_for_user(raw_error)
             await db.commit()
-            print(f"✗ Episode {episode_id} processing failed: {str(e)}")
+            print(f"✗ Episode {episode_id} processing failed: {raw_error}")
+            print(f"  → User-friendly message: {episode.error_message}")
             
             # Print full traceback for debugging
             import traceback
@@ -560,7 +570,8 @@ async def get_episode(
         "podcast": {
             "id": podcast.id,
             "title": podcast.title,
-            "slug": podcast.slug
+            "slug": podcast.slug,
+            "image_url": podcast.image_url
         },
         "transcript": episode.transcript_text,
         "summary": summary_data,
@@ -601,6 +612,7 @@ async def list_episodes(
             "status": ep.status,
             "error_message": ep.error_message,
             "podcast_title": podcast.title,
+            "podcast_image_url": podcast.image_url,
             "created_at": ep.created_at.isoformat()
         })
         

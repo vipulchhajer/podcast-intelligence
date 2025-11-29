@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Button } from '../components/Button'
 
 function Home() {
   return (
@@ -12,15 +13,12 @@ function Home() {
         <p className="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
           Transform podcasts into actionable insights. Transcribe, summarize, and extract key themes from your favorite shows.
         </p>
-        <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
-          <div className="rounded-md shadow">
-            <Link
-              to="/podcasts"
-              className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 md:py-4 md:text-lg md:px-10"
-            >
+        <div className="mt-8 flex justify-center">
+          <Link to="/podcasts">
+            <Button variant="primary" size="lg" className="text-lg px-10 py-4">
               Get Started
-            </Link>
-          </div>
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -28,7 +26,7 @@ function Home() {
       <div className="mt-20">
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
           <div className="pt-6">
-            <div className="flow-root bg-white rounded-lg px-6 pb-8">
+            <div className="flow-root bg-white rounded-xl shadow-sm px-6 pb-8 hover:shadow-md transition-shadow">
               <div className="-mt-6">
                 <div>
                   <span className="inline-flex items-center justify-center p-3 bg-primary-500 rounded-md shadow-lg">
@@ -46,7 +44,7 @@ function Home() {
           </div>
 
           <div className="pt-6">
-            <div className="flow-root bg-white rounded-lg px-6 pb-8">
+            <div className="flow-root bg-white rounded-xl shadow-sm px-6 pb-8 hover:shadow-md transition-shadow">
               <div className="-mt-6">
                 <div>
                   <span className="inline-flex items-center justify-center p-3 bg-primary-500 rounded-md shadow-lg">
@@ -64,7 +62,7 @@ function Home() {
           </div>
 
           <div className="pt-6">
-            <div className="flow-root bg-white rounded-lg px-6 pb-8">
+            <div className="flow-root bg-white rounded-xl shadow-sm px-6 pb-8 hover:shadow-md transition-shadow">
               <div className="-mt-6">
                 <div>
                   <span className="inline-flex items-center justify-center p-3 bg-primary-500 rounded-md shadow-lg">
@@ -135,4 +133,5 @@ function Home() {
 }
 
 export default Home
+
 

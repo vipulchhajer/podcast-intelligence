@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { addPodcast, listPodcasts, getPodcastEpisodes, processEpisode } from '../api/client'
+import { addPodcast, listPodcasts } from '../api/client'
+import { Button } from '../components/Button'
 
 // Toast notification component
 const Toast = ({ message, type, onClose }) => {
@@ -43,10 +44,6 @@ function Podcasts() {
   const [loading, setLoading] = useState(true)
   const [rssUrl, setRssUrl] = useState('')
   const [addingPodcast, setAddingPodcast] = useState(false)
-  const [selectedPodcast, setSelectedPodcast] = useState(null)
-  const [episodes, setEpisodes] = useState([])
-  const [loadingEpisodes, setLoadingEpisodes] = useState(false)
-  const [processingEpisodes, setProcessingEpisodes] = useState(new Set())
   const [toast, setToast] = useState(null)
   const navigate = useNavigate()
 
@@ -89,58 +86,8 @@ function Podcasts() {
     }
   }
 
-  const handleSelectPodcast = async (podcast) => {
-    setSelectedPodcast(podcast)
-    setLoadingEpisodes(true)
-    try {
-      const data = await getPodcastEpisodes(podcast.id)
-      setEpisodes(data.episodes || [])
-    } catch (error) {
-      console.error('Failed to fetch episodes:', error)
-      showToast('Failed to load episodes. Please try again.', 'error')
-    } finally {
-      setLoadingEpisodes(false)
-    }
-  }
-
-  const handleProcessEpisode = async (episode) => {
-    setProcessingEpisodes(new Set(processingEpisodes).add(episode.guid))
-    try {
-      const result = await processEpisode(selectedPodcast.id, episode.guid)
-      showToast('Processing started! Check "My Episodes" to track progress.', 'success')
-      
-      // Refresh episodes to update status
-      const data = await getPodcastEpisodes(selectedPodcast.id)
-      setEpisodes(data.episodes || [])
-    } catch (error) {
-      console.error('Failed to process episode:', error)
-      const errorMsg = error.response?.data?.detail || 'Failed to start processing. Please try again.'
-      showToast(errorMsg, 'error')
-    } finally {
-      const newProcessing = new Set(processingEpisodes)
-      newProcessing.delete(episode.guid)
-      setProcessingEpisodes(newProcessing)
-    }
-  }
-
-  const getStatusBadge = (status) => {
-    const badges = {
-      'new': 'bg-gray-100 text-gray-800',
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'downloading': 'bg-blue-100 text-blue-800',
-      'transcribing': 'bg-indigo-100 text-indigo-800',
-      'summarizing': 'bg-purple-100 text-purple-800',
-      'completed': 'bg-green-100 text-green-800',
-      'failed': 'bg-red-100 text-red-800',
-    }
-    return badges[status] || 'bg-gray-100 text-gray-800'
-  }
-
-  const getStatusIcon = (status) => {
-    if (['downloading', 'transcribing', 'summarizing', 'pending'].includes(status)) {
-      return <LoadingSpinner size="sm" />
-    }
-    return null
+  const handlePodcastClick = (podcast) => {
+    navigate(`/podcasts/${podcast.id}`)
   }
 
   if (loading) {
@@ -159,128 +106,62 @@ function Podcasts() {
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Podcasts</h1>
 
       {/* Add Podcast Form */}
-      <div className="bg-white shadow rounded-lg p-6 mb-8">
+      <div className="bg-white shadow-sm rounded-xl p-6 mb-8">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Add New Podcast</h2>
-        <form onSubmit={handleAddPodcast} className="flex gap-4">
+        <form onSubmit={handleAddPodcast} className="flex flex-col sm:flex-row gap-4">
           <input
             type="url"
             value={rssUrl}
             onChange={(e) => setRssUrl(e.target.value)}
             placeholder="Paste RSS feed URL here..."
-            className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+            className="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
             required
             disabled={addingPodcast}
           />
-          <button
+          <Button
             type="submit"
+            variant="primary"
+            size="md"
+            loading={addingPodcast}
             disabled={addingPodcast}
-            className="px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
           >
-            {addingPodcast && <LoadingSpinner size="sm" />}
             {addingPodcast ? 'Adding...' : 'Add Podcast'}
-          </button>
+          </Button>
         </form>
       </div>
 
       {/* Podcasts List */}
       {podcasts.length === 0 ? (
-        <div className="text-center py-12">
+        <div className="bg-white shadow-sm rounded-xl p-12 text-center">
           <p className="text-gray-500">No podcasts yet. Add your first podcast above!</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
           {podcasts.map((podcast) => (
             <div
               key={podcast.id}
-              onClick={() => handleSelectPodcast(podcast)}
-              className={`bg-white shadow rounded-lg p-6 cursor-pointer hover:shadow-lg transition-shadow ${
-                selectedPodcast?.id === podcast.id ? 'ring-2 ring-primary-500' : ''
-              }`}
+              onClick={() => handlePodcastClick(podcast)}
+              className="bg-white shadow-sm rounded-xl overflow-hidden cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all duration-200 group"
             >
-              <h3 className="text-lg font-medium text-gray-900 mb-2">{podcast.title}</h3>
-              <p className="text-sm text-gray-500">{podcast.slug}</p>
+              {podcast.image_url && (
+                <div className="w-full aspect-square bg-gray-100">
+                  <img 
+                    src={podcast.image_url} 
+                    alt={podcast.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    onError={(e) => {
+                      e.target.style.display = 'none'
+                    }}
+                  />
+                </div>
+              )}
+              <div className="p-4">
+                <h3 className="text-base md:text-lg font-medium text-gray-900 mb-1 line-clamp-2">{podcast.title}</h3>
+                <p className="text-xs md:text-sm text-gray-500 truncate">{podcast.slug}</p>
+              </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Episodes List */}
-      {selectedPodcast && (
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">
-            Episodes - {selectedPodcast.title}
-          </h2>
-
-          {loadingEpisodes ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-4">
-              <LoadingSpinner size="lg" />
-              <div className="text-gray-500">Loading episodes...</div>
-            </div>
-          ) : episodes.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No episodes found</div>
-          ) : (
-            <div className="space-y-4">
-              {episodes.map((episode) => (
-                <div
-                  key={episode.guid}
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-medium text-gray-900">{episode.title}</h3>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {episode.published ? new Date(episode.published).toLocaleDateString() : 'No date'}
-                        {episode.duration_formatted && ` • ${episode.duration_formatted}`}
-                      </p>
-                      {episode.description && (
-                        <p className="text-sm text-gray-600 mt-2 line-clamp-2">
-                          {episode.description}
-                        </p>
-                      )}
-                      {episode.status === 'failed' && (
-                        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm">
-                          <p className="text-red-800 font-medium">Error:</p>
-                          <p className="text-red-600 text-xs mt-1">{episode.error_message || 'Processing failed'}</p>
-                        </div>
-                      )}
-                    </div>
-                    <div className="ml-4 flex items-center gap-2">
-                      <span className={`px-3 py-1 text-xs font-medium rounded-full flex items-center gap-2 ${getStatusBadge(episode.status)}`}>
-                        {getStatusIcon(episode.status)}
-                        {episode.status}
-                      </span>
-                      {episode.status === 'new' && (
-                        <button
-                          onClick={() => handleProcessEpisode(episode)}
-                          disabled={processingEpisodes.has(episode.guid)}
-                          className="px-4 py-2 bg-primary-600 text-white text-sm rounded-md hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
-                        >
-                          {processingEpisodes.has(episode.guid) && <LoadingSpinner size="sm" />}
-                          {processingEpisodes.has(episode.guid) ? 'Starting...' : 'Process'}
-                        </button>
-                      )}
-                      {episode.status === 'completed' && episode.id && (
-                        <button
-                          onClick={() => navigate(`/episodes/${episode.id}`)}
-                          className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
-                        >
-                          View
-                        </button>
-                      )}
-                      {episode.status === 'failed' && (
-                        <button
-                          onClick={() => handleProcessEpisode(episode)}
-                          className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700"
-                        >
-                          Retry
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>

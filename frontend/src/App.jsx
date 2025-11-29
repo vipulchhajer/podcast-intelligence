@@ -2,8 +2,10 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import { useState } from 'react'
 import Home from './pages/Home'
 import Podcasts from './pages/Podcasts'
+import PodcastEpisodes from './pages/PodcastEpisodes'
 import Episodes from './pages/Episodes'
 import EpisodeDetail from './pages/EpisodeDetail'
+import DesignDemo from './pages/DesignDemo'
 
 function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -52,8 +54,10 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/podcasts" element={<Podcasts />} />
+            <Route path="/podcasts/:podcastId" element={<PodcastEpisodes />} />
             <Route path="/episodes" element={<Episodes />} />
             <Route path="/episodes/:id" element={<EpisodeDetail />} />
+            <Route path="/design-demo" element={<DesignDemo />} />
           </Routes>
         </main>
       </div>
@@ -62,4 +66,5 @@ function App() {
 }
 
 export default App
+
 

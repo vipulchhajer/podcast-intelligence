@@ -35,3 +35,4 @@ echo ""
 trap "echo 'Stopping servers...'; kill $BACKEND_PID $FRONTEND_PID; exit" INT
 wait
 
+

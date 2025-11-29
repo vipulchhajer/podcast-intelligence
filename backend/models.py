@@ -32,6 +32,7 @@ class Podcast(Base):
     rss_url = Column(String, unique=True, nullable=False)
     author = Column(String, nullable=True)
     description = Column(Text, nullable=True)
+    image_url = Column(String, nullable=True)
     slug = Column(String, unique=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
