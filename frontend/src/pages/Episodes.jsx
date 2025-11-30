@@ -4,6 +4,7 @@ import { listEpisodes, processEpisode } from '../api/client'
 import { usePolling } from '../hooks/usePolling'
 import { Button } from '../components/Button'
 import { StatusBadge } from '../components/StatusBadge'
+import { Pagination } from '../components/Pagination'
 
 // Loading spinner component
 const LoadingSpinner = ({ size = 'md' }) => {
@@ -18,31 +19,104 @@ const LoadingSpinner = ({ size = 'md' }) => {
   )
 }
 
+// Skeleton loader for episodes
+const EpisodeSkeleton = () => (
+  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
+    <div className="flex items-start gap-4">
+      <div className="w-16 h-16 bg-gray-200 rounded-lg flex-shrink-0"></div>
+      <div className="flex-1 space-y-3">
+        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+        <div className="flex gap-2">
+          <div className="h-6 bg-gray-200 rounded w-20"></div>
+          <div className="h-6 bg-gray-200 rounded w-24"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+)
+
 function Episodes() {
   const [episodes, setEpisodes] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState(null)
   const [retrying, setRetrying] = useState({}) // Track retry state per episode
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalEpisodes, setTotalEpisodes] = useState(0)
+  const [limit] = useState(20) // Episodes per page
+  const [expandedPodcasts, setExpandedPodcasts] = useState(new Set()) // Track which podcasts are expanded
   const navigate = useNavigate()
 
+  const togglePodcast = (podcastId) => {
+    const newExpanded = new Set(expandedPodcasts)
+    if (newExpanded.has(podcastId)) {
+      newExpanded.delete(podcastId)
+    } else {
+      newExpanded.add(podcastId)
+    }
+    setExpandedPodcasts(newExpanded)
+  }
+
   useEffect(() => {
+    setCurrentPage(1) // Reset to page 1 when filter changes
     fetchEpisodes()
   }, [statusFilter])
 
+  useEffect(() => {
+    fetchEpisodes()
+  }, [currentPage])
+
   // Auto-refresh episode statuses every 3 seconds
-  usePolling(() => fetchEpisodes(true), 3000, [])
+  usePolling(() => fetchEpisodes(true), 3000, [currentPage, statusFilter])
 
   const fetchEpisodes = async (silent = false) => {
-    if (!silent) setLoading(true)
     try {
-      const data = await listEpisodes(50, statusFilter)
-      setEpisodes(data)
+      const offset = (currentPage - 1) * limit
+      const data = await listEpisodes(limit, offset, statusFilter)
+      setEpisodes(data.episodes)
+      setTotalEpisodes(data.total)
     } catch (error) {
       console.error('Failed to fetch episodes:', error)
     } finally {
-      if (!silent) setLoading(false)
+      setInitialLoading(false)
     }
   }
+
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const totalPages = Math.ceil(totalEpisodes / limit)
+
+  // Group episodes by podcast
+  const groupedEpisodes = episodes.reduce((groups, episode) => {
+    const podcastKey = episode.podcast_id
+    if (!groups[podcastKey]) {
+      groups[podcastKey] = {
+        podcast_id: episode.podcast_id,
+        podcast_title: episode.podcast_title,
+        podcast_image_url: episode.podcast_image_url,
+        episodes: []
+      }
+    }
+    groups[podcastKey].episodes.push(episode)
+    return groups
+  }, {})
+
+  const podcastGroups = Object.values(groupedEpisodes)
+
+  // Helper functions for expand/collapse
+  const expandAll = () => {
+    const allPodcastIds = podcastGroups.map(group => group.podcast_id)
+    setExpandedPodcasts(new Set(allPodcastIds))
+  }
+
+  const collapseAll = () => {
+    setExpandedPodcasts(new Set())
+  }
+
+  const allExpanded = podcastGroups.length > 0 && expandedPodcasts.size === podcastGroups.length
 
   const handleRetry = async (episode, e) => {
     e.stopPropagation() // Prevent navigation when clicking retry
@@ -58,54 +132,79 @@ function Episodes() {
       }, 1000)
     } catch (error) {
       console.error('Failed to retry episode:', error)
-      alert(error.response?.data?.detail || 'Failed to retry episode. Please try again.')
+      // Use console for now - could add toast notification in future
+      window.alert(error.response?.data?.detail || 'Failed to retry episode. Please try again.')
     } finally {
       setRetrying(prev => ({ ...prev, [episode.id]: false }))
     }
   }
 
 
-  if (loading) {
-    return (
-      <div className="flex flex-col justify-center items-center h-64 gap-4">
-        <LoadingSpinner size="lg" />
-        <div className="text-gray-500">Loading episodes...</div>
-      </div>
-    )
-  }
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">My Episodes</h1>
-        
-        {/* Status Filter */}
-        <div className="flex gap-2">
-          <Button
-            variant={statusFilter === null ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setStatusFilter(null)}
-          >
-            All
-          </Button>
-          <Button
-            variant={statusFilter === 'completed' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setStatusFilter('completed')}
-          >
-            Completed
-          </Button>
-          <Button
-            variant={statusFilter === 'transcribing' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setStatusFilter('transcribing')}
-          >
-            Processing
-          </Button>
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <h1 className="text-3xl font-bold text-gray-900">My Episodes</h1>
+          
+          {/* Status Filter */}
+          <div className="flex gap-2">
+            <Button
+              variant={statusFilter === null ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setStatusFilter(null)}
+            >
+              All
+            </Button>
+            <Button
+              variant={statusFilter === 'completed' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setStatusFilter('completed')}
+            >
+              Completed
+            </Button>
+            <Button
+              variant={statusFilter === 'transcribing' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setStatusFilter('transcribing')}
+            >
+              Processing
+            </Button>
+          </div>
         </div>
+
+        {/* Expand/Collapse All - Only show if there are podcasts */}
+        {podcastGroups.length > 1 && (
+          <div className="flex justify-end">
+            <Button
+              variant="link"
+              size="sm"
+              onClick={allExpanded ? collapseAll : expandAll}
+              icon={
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {allExpanded ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  )}
+                </svg>
+              }
+            >
+              {allExpanded ? 'Collapse All' : 'Expand All'}
+            </Button>
+          </div>
+        )}
       </div>
 
-      {episodes.length === 0 ? (
+      {/* Show skeleton loaders while initial data is loading */}
+      {initialLoading ? (
+        <div className="space-y-4">
+          <div className="bg-gray-50 rounded-lg p-4 text-center text-sm text-gray-500 flex items-center justify-center gap-2">
+            <LoadingSpinner size="sm" />
+            <span>Loading your episodes...</span>
+          </div>
+          {[1, 2, 3, 4, 5].map(i => <EpisodeSkeleton key={i} />)}
+        </div>
+      ) : episodes.length === 0 ? (
         <div className="bg-white shadow-sm rounded-xl p-12 text-center">
           <p className="text-gray-500 mb-6">No episodes yet. Start by adding a podcast!</p>
           <Button variant="primary" size="lg" onClick={() => navigate('/podcasts')}>
@@ -113,113 +212,193 @@ function Episodes() {
           </Button>
         </div>
       ) : (
-        <div className="bg-white shadow-sm rounded-xl overflow-hidden">
-          <ul className="divide-y divide-gray-100">
-            {episodes.map((episode) => (
-              <li
-                key={episode.id}
-                onClick={() => episode.status === 'completed' && navigate(`/episodes/${episode.id}`)}
-                className={`p-6 ${
-                  episode.status === 'completed'
-                    ? 'hover:bg-gray-50 cursor-pointer'
-                    : 'cursor-default'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  {/* Podcast Thumbnail - Hidden on mobile, shown on sm+ */}
-                  {episode.podcast_image_url && (
-                    <div className="hidden sm:block flex-shrink-0">
-                      <img 
-                        src={episode.podcast_image_url} 
-                        alt={episode.podcast_title}
-                        className="w-16 h-16 rounded-lg object-cover shadow-sm"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.target.style.display = 'none'
-                        }}
-                      />
+        <>
+          <div className="space-y-3">
+            {/* Accordion: Group episodes by podcast */}
+            {podcastGroups.map((group) => {
+              const isExpanded = expandedPodcasts.has(group.podcast_id)
+              
+              return (
+                <div key={group.podcast_id} className="bg-white shadow-sm rounded-xl overflow-hidden transition-all">
+                  {/* Podcast header - Clickable to expand/collapse */}
+                  <button
+                    onClick={() => togglePodcast(group.podcast_id)}
+                    className="w-full bg-gradient-to-r from-primary-50 to-white px-6 py-4 hover:from-primary-100 hover:to-primary-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      {group.podcast_image_url && (
+                        <img 
+                          src={group.podcast_image_url} 
+                          alt={group.podcast_title}
+                          className="w-12 h-12 rounded-lg object-cover shadow-sm flex-shrink-0"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.style.display = 'none'
+                          }}
+                        />
+                      )}
+                      <div className="flex-1 text-left">
+                        <h2 className="text-lg font-bold text-gray-900">{group.podcast_title}</h2>
+                        <p className="text-sm text-gray-600">
+                          {group.episodes.length} episode{group.episodes.length !== 1 ? 's' : ''}
+                          {!isExpanded && (
+                            <span className="text-gray-500"> • Click to expand</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant="link"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            navigate(`/podcasts/${group.podcast_id}`)
+                          }}
+                        >
+                          View Podcast →
+                        </Button>
+                        {/* Expand/Collapse Icon */}
+                        <svg 
+                          className={`w-6 h-6 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
                     </div>
-                  )}
-                  
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-primary-600 truncate">
-                      {episode.podcast_title}
-                    </p>
-                    <p className="mt-1 text-base sm:text-lg font-semibold text-gray-900 line-clamp-2">{episode.title}</p>
-                    <p className="mt-1 text-xs sm:text-sm text-gray-500">
-                      {episode.published ? new Date(episode.published).toLocaleDateString() : 'No date'} •{' '}
-                      {new Date(episode.created_at).toLocaleDateString()}
-                    </p>
-                    {episode.status === 'failed' && episode.error_message && (
-                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                              </svg>
-                              <p className="text-red-800 text-xs font-semibold">Processing Failed</p>
+                  </button>
+
+                  {/* Episodes list - Only shown when expanded */}
+                  {isExpanded && (
+                    <ul className="divide-y divide-gray-100 border-t border-gray-100">
+                      {group.episodes.map((episode) => (
+                    <li
+                      key={episode.id}
+                      onClick={() => episode.status === 'completed' && navigate(`/episodes/${episode.id}`)}
+                      className={`p-6 ${
+                        episode.status === 'completed'
+                          ? 'hover:bg-gray-50 cursor-pointer'
+                          : 'cursor-default'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-base sm:text-lg font-semibold text-gray-900 line-clamp-2">{episode.title}</p>
+                          <p className="mt-1 text-xs sm:text-sm text-gray-500">
+                            {episode.published ? new Date(episode.published).toLocaleDateString() : 'No date'} •{' '}
+                            Added {new Date(episode.created_at).toLocaleDateString()}
+                          </p>
+                          {episode.status === 'failed' && episode.error_message && (
+                            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                    </svg>
+                                    <p className="text-red-800 text-xs font-semibold">Processing Failed</p>
+                                  </div>
+                                  <p className="text-red-600 text-xs leading-relaxed">{episode.error_message}</p>
+                                  
+                                  {/* Show helpful tip for "Access denied" errors */}
+                                  {episode.error_message.toLowerCase().includes('access denied') || 
+                                   episode.error_message.toLowerCase().includes('blocking downloads') ? (
+                                    <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+                                      <p className="text-blue-800 text-xs font-medium mb-1">💡 Tip: Try Alternative RSS</p>
+                                      <p className="text-blue-700 text-xs">
+                                        Visit{' '}
+                                        <a 
+                                          href="https://getrssfeed.com" 
+                                          target="_blank" 
+                                          rel="noopener noreferrer"
+                                          className="underline hover:text-blue-900 font-medium"
+                                        >
+                                          getrssfeed.com
+                                        </a>
+                                        {' '}to find alternative RSS feeds for this podcast that may work better.
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <p className="text-red-700 text-xs mt-2 font-medium">
+                                      💡 Click "Retry" to process this episode again
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <p className="text-red-600 text-xs leading-relaxed">{episode.error_message}</p>
-                            <p className="text-red-700 text-xs mt-2 font-medium">
-                              💡 Click "Retry" to process this episode again
-                            </p>
-                          </div>
+                          )}
+                        </div>
+                        <div className="ml-4 flex-shrink-0 flex items-center gap-3">
+                          <StatusBadge status={episode.status} />
+                          
+                          {/* Retry button for failed episodes */}
+                          {episode.status === 'failed' && (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={(e) => handleRetry(episode, e)}
+                              loading={retrying[episode.id]}
+                              disabled={retrying[episode.id]}
+                              icon={
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                              }
+                            >
+                              {retrying[episode.id] ? 'Retrying...' : 'Retry'}
+                            </Button>
+                          )}
+                          
+                          {/* Restart button for stuck pending episodes */}
+                          {episode.status === 'pending' && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={(e) => handleRetry(episode, e)}
+                              loading={retrying[episode.id]}
+                              disabled={retrying[episode.id]}
+                              icon={
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                              }
+                            >
+                              {retrying[episode.id] ? 'Restarting...' : 'Restart'}
+                            </Button>
+                          )}
+                          
+                          {/* Show progress message only for actually processing episodes */}
+                          {['downloading', 'transcribing', 'summarizing'].includes(episode.status) && (
+                            <div className="text-xs text-gray-500 italic">
+                              Processing...
+                            </div>
+                          )}
                         </div>
                       </div>
-                    )}
-                  </div>
-                  <div className="ml-4 flex-shrink-0 flex items-center gap-3">
-                    <StatusBadge status={episode.status} />
-                    
-                    {/* Retry button for failed episodes */}
-                    {episode.status === 'failed' && (
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={(e) => handleRetry(episode, e)}
-                        loading={retrying[episode.id]}
-                        disabled={retrying[episode.id]}
-                        icon={
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                        }
-                      >
-                        {retrying[episode.id] ? 'Retrying...' : 'Retry'}
-                      </Button>
-                    )}
-                    
-                    {/* Restart button for stuck pending episodes */}
-                    {episode.status === 'pending' && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={(e) => handleRetry(episode, e)}
-                        loading={retrying[episode.id]}
-                        disabled={retrying[episode.id]}
-                        icon={
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                        }
-                      >
-                        {retrying[episode.id] ? 'Restarting...' : 'Restart'}
-                      </Button>
-                    )}
-                    
-                    {/* Show progress message only for actually processing episodes */}
-                    {['downloading', 'transcribing', 'summarizing'].includes(episode.status) && (
-                      <div className="text-xs text-gray-500 italic">
-                        Processing...
-                      </div>
-                    )}
-                  </div>
+                      </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+              )
+            })}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-6 bg-white shadow-sm rounded-xl overflow-hidden">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                total={totalEpisodes}
+                showing={episodes.length}
+              />
+            </div>
+          )}
+        </>
       )}
     </div>
   )

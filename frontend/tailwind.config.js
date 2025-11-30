@@ -20,9 +20,15 @@ export default {
           900: '#1e3a8a',
         },
       },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        serif: ['Crimson Pro', 'Georgia', 'serif'],
+      },
     },
   },
   plugins: [],
 }
+
+
 
 

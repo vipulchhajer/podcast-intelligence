@@ -13,7 +13,7 @@ export function EpisodeCardMinimal({ episode, onProcess, onView, isProcessing })
     <div className="group relative bg-white border border-gray-200/60 hover:border-gray-300 rounded-2xl p-6 transition-all duration-300 hover:shadow-sm">
       {/* Status indicator as subtle line */}
       <div className={`absolute top-0 left-0 w-1 h-full rounded-l-2xl ${
-        episode.status === 'completed' ? 'bg-green-500' : 
+        episode.status === 'completed' ? 'bg-cyan-500' : 
         episode.status === 'failed' ? 'bg-red-500' :
         episode.status === 'new' ? 'bg-gray-300' :
         'bg-blue-500'
@@ -104,7 +104,7 @@ export function EpisodeCardModern({ episode, onProcess, onView, isProcessing }) 
               </Button>
             )}
             {episode.status === 'completed' && (
-              <Button variant="success" size="sm" onClick={onView}>
+              <Button variant="outline" size="sm" onClick={onView}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -193,7 +193,7 @@ export function EpisodeCardPremium({ episode, onProcess, onView, isProcessing })
               )}
               {episode.status === 'completed' && (
                 <Button 
-                  variant="success" 
+                  variant="outline" 
                   size="sm" 
                   onClick={onView}
                   className="flex-1 sm:flex-none"

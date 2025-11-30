@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./podcast_app.db"
     storage_path: Path = Path("./storage")
     
+    # Simple passcode protection (optional)
+    app_passcode: str = ""  # Set to enable passcode protection
+    
     # CORS
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
     
@@ -26,6 +29,10 @@ class Settings(BaseSettings):
     transcription_model: str = "whisper-large-v3"
     summarization_model: str = "llama-3.3-70b-versatile"
     context_window: int = 32768
+    
+    # Safety limits
+    max_episode_duration_minutes: int = 180  # 3 hours max
+    max_episodes_per_day: int = 50  # Limit daily processing
     
     @property
     def cors_origins_list(self) -> list[str]:

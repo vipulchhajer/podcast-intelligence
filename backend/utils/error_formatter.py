@@ -46,39 +46,48 @@ def format_error_for_user(error_message: str) -> str:
     if "file" in error_lower and ("large" in error_lower or "size" in error_lower or "limit" in error_lower):
         return "This audio file is too large. The system will automatically compress it and try again."
     
-    # 4. Invalid Audio Format
+    # 4. Access Denied / Forbidden (403, 401, 404)
+    if any(code in error_message for code in ["403", "401", "404", "Forbidden", "Unauthorized", "Not Found"]):
+        if "403" in error_message or "Forbidden" in error_message:
+            return "Access denied: The podcast host is blocking downloads. Try again later or contact the podcast publisher."
+        elif "404" in error_message or "Not Found" in error_message:
+            return "Audio file not found. The episode may have been removed or the URL is broken."
+        else:
+            return "Authentication required to access this audio file. The podcast may require a subscription."
+    
+    # 5. Invalid Audio Format
     if "format" in error_lower or "codec" in error_lower or "invalid audio" in error_lower:
         return "This audio format isn't supported. Please use MP3, WAV, or M4A files."
     
-    # 5. Network/Connection Errors
+    # 7. Network/Connection Errors
     if any(word in error_lower for word in ["network", "connection", "timeout", "timed out", "unreachable"]):
         return "Connection issue detected. The system will automatically retry. Check your internet connection."
     
-    # 6. API Key Issues
+    # 8. API Key Issues
     if "api key" in error_lower or "authentication" in error_lower or "unauthorized" in error_lower:
         return "API authentication issue. Please contact support - this is a configuration problem."
     
-    # 7. Disk Space
+    # 9. Disk Space
     if "disk" in error_lower or "storage" in error_lower or "no space" in error_lower:
         return "Server storage is full. Please contact support to free up space."
     
-    # 8. Missing Episode/Podcast
+    # 10. Missing Episode/Podcast
     if "not found" in error_lower and ("episode" in error_lower or "podcast" in error_lower):
         return "This episode is no longer available in the podcast feed. It may have been removed by the publisher."
     
-    # 9. Download Failed
+    # 11. Download Failed
     if "download" in error_lower and ("failed" in error_lower or "error" in error_lower):
         return "Failed to download the audio file. The podcast URL may be broken or the file may have been removed."
     
-    # 10. Generic Rate Limit (catch-all)
+    # 12. Generic Rate Limit (catch-all)
     if "rate limit" in error_lower or "too many requests" in error_lower:
         return "You're processing episodes too quickly. The system will automatically retry. Just wait a moment!"
     
-    # 11. Transcription Failed (Generic)
+    # 13. Transcription Failed (Generic)
     if "transcription" in error_lower or "transcribe" in error_lower:
         return "Failed to transcribe the audio. The file may be corrupt or in an unsupported format. Try downloading the episode again."
     
-    # 12. Summarization Failed (Generic)
+    # 14. Summarization Failed (Generic)
     if "summar" in error_lower:
         return "Failed to generate summary. The transcript may be too complex. Try processing the episode again."
     
@@ -125,4 +134,6 @@ def format_error_with_action(error_message: str, action: str = "retry") -> dict:
         "suggested_action": suggested_action,
         "original_error": error_message  # Keep for debugging
     }
+
+
 

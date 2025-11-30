@@ -75,3 +75,5 @@ As the app grows, consider extracting these patterns:
 - `useAuth` - Authentication state management
 - `useLocalStorage` - Persist state to localStorage
 
+
+

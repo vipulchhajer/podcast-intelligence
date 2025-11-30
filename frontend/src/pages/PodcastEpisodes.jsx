@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getPodcastEpisodes, processEpisode } from '../api/client'
 import { sanitizeHtml } from '../utils/sanitizeHtml'
 import { usePolling } from '../hooks/usePolling'
 import { Button } from '../components/Button'
 import { EpisodeCardModern } from '../components/EpisodeCard'
+import { Pagination } from '../components/Pagination'
 
 // Toast notification component
 const Toast = ({ message, type, onClose }) => {
@@ -13,7 +14,7 @@ const Toast = ({ message, type, onClose }) => {
     return () => clearTimeout(timer)
   }, [onClose])
 
-  const bgColor = type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-blue-500'
+  const bgColor = type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-blue-500' : 'bg-primary-600'
   
   return (
     <div className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 max-w-md`}>
@@ -47,35 +48,47 @@ function PodcastEpisodes() {
   const navigate = useNavigate()
   const [podcast, setPodcast] = useState(null)
   const [episodes, setEpisodes] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [pageLoading, setPageLoading] = useState(false)
   const [processingEpisodes, setProcessingEpisodes] = useState(new Set())
   const [toast, setToast] = useState(null)
   const [lastRefresh, setLastRefresh] = useState(new Date())
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalInFeed, setTotalInFeed] = useState(0)
+  const episodesPerPage = 20
 
   const showToast = (message, type = 'info') => {
     setToast({ message, type })
   }
 
-  useEffect(() => {
-    fetchEpisodes()
-  }, [podcastId])
-
-  // Auto-refresh episode statuses every 3 seconds
-  usePolling(() => fetchEpisodes(true), 3000, [podcastId])
-
-  const fetchEpisodes = async (silent = false) => {
-    if (!silent) setLoading(true)
+  const fetchEpisodes = useCallback(async (silent = false) => {
+    if (!silent) setPageLoading(true)
     try {
-      const data = await getPodcastEpisodes(podcastId)
+      const offset = (currentPage - 1) * episodesPerPage
+      const data = await getPodcastEpisodes(podcastId, episodesPerPage, offset)
       setPodcast(data.podcast)
       setEpisodes(data.episodes || [])
+      setTotalInFeed(data.total_in_feed || 0)
       setLastRefresh(new Date())
     } catch (error) {
       console.error('Failed to fetch episodes:', error)
       if (!silent) showToast('Failed to load episodes. Please try again.', 'error')
     } finally {
-      if (!silent) setLoading(false)
+      setInitialLoading(false)
+      if (!silent) setPageLoading(false)
     }
+  }, [podcastId, currentPage, episodesPerPage])
+
+  useEffect(() => {
+    fetchEpisodes()
+  }, [fetchEpisodes])
+
+  // Auto-refresh episode statuses every 3 seconds
+  usePolling(() => fetchEpisodes(true), 3000, [podcastId, currentPage])
+
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleProcessEpisode = async (episode) => {
@@ -100,7 +113,7 @@ function PodcastEpisodes() {
   }
 
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="flex flex-col justify-center items-center h-64 gap-4">
         <LoadingSpinner size="lg" />
@@ -169,7 +182,20 @@ function PodcastEpisodes() {
       {/* Episodes List */}
       <div className="bg-white shadow-sm rounded-xl p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Episodes</h2>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Episodes</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              {episodes.length > 0 && (
+                <>
+                  Showing {(currentPage - 1) * episodesPerPage + 1}-
+                  {Math.min(currentPage * episodesPerPage, totalInFeed)} of {totalInFeed} episodes from RSS feed
+                </>
+              )}
+              {episodes.length === 0 && (
+                <>No episodes found</>
+              )}
+            </p>
+          </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-gray-500">
               Auto-updates every 3s • Last: {lastRefresh.toLocaleTimeString()}
@@ -192,17 +218,42 @@ function PodcastEpisodes() {
         {episodes.length === 0 ? (
           <div className="text-center py-8 text-gray-500">No episodes found</div>
         ) : (
-          <div className="space-y-4">
-            {episodes.map((episode) => (
-              <EpisodeCardModern
-                key={episode.guid}
-                episode={episode}
-                onProcess={() => handleProcessEpisode(episode)}
-                onView={() => navigate(`/episodes/${episode.id}`)}
-                isProcessing={processingEpisodes.has(episode.guid)}
+          <>
+            <div className="relative">
+              {/* Loading overlay */}
+              {pageLoading && (
+                <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+                  <div className="flex flex-col items-center gap-3">
+                    <LoadingSpinner size="lg" />
+                    <span className="text-sm text-gray-600 font-medium">Loading episodes...</span>
+                  </div>
+                </div>
+              )}
+              
+              <div className="space-y-4">
+                {episodes.map((episode) => (
+                  <EpisodeCardModern
+                    key={episode.guid}
+                    episode={episode}
+                    onProcess={() => handleProcessEpisode(episode)}
+                    onView={() => navigate(`/episodes/${episode.id}`)}
+                    isProcessing={processingEpisodes.has(episode.guid)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Pagination */}
+            {totalInFeed > episodesPerPage && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={Math.ceil(totalInFeed / episodesPerPage)}
+                onPageChange={handlePageChange}
+                total={totalInFeed}
+                showing={episodes.length}
               />
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
     </div>

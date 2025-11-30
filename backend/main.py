@@ -1,6 +1,6 @@
 """Main FastAPI application."""
 
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,15 +8,19 @@ from sqlalchemy import select
 from contextlib import asynccontextmanager
 from pathlib import Path
 from datetime import datetime
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import json
 import sys
+import os
 
 # Add parent directory to path to import from src
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from config import settings
 from database import init_db, get_db
-from models import User, Podcast, Episode
+from models import User, Podcast, Episode, EmailCapture
 from services.groq_service import groq_service
 from podcast_intelligence.rss_parser import RSSParser
 from podcast_intelligence.downloader import AudioDownloader
@@ -59,6 +63,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -67,6 +76,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Simple passcode protection middleware
+@app.middleware("http")
+async def check_passcode(request: Request, call_next):
+    """Check passcode for protected endpoints (if enabled)."""
+    if settings.app_passcode and request.url.path.startswith("/api/"):
+        # Allow health check and root without passcode
+        if request.url.path in ["/api/health", "/health", "/"]:
+            return await call_next(request)
+        
+        # Check passcode in header
+        passcode = request.headers.get("X-App-Passcode")
+        if passcode != settings.app_passcode:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing passcode"}
+            )
+    
+    return await call_next(request)
 
 
 # Pydantic schemas
@@ -81,6 +110,11 @@ class PodcastCreate(BaseModel):
 class EpisodeProcess(BaseModel):
     """Schema for processing an episode."""
     episode_guid: str
+
+
+class EmailCaptureCreate(BaseModel):
+    """Schema for email capture."""
+    email: str
 
 
 class EpisodeResponse(BaseModel):
@@ -116,10 +150,58 @@ async def health_check():
     return {"status": "healthy"}
 
 
+# Email capture (for beta users)
+
+@app.post("/api/email-capture")
+@limiter.limit("5/hour")  # Prevent spam
+async def capture_email(
+    request: Request,
+    email_data: EmailCaptureCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Capture user email on first visit (beta testers)."""
+    email = email_data.email.strip().lower()
+    
+    # Basic email validation
+    if not email or '@' not in email:
+        raise HTTPException(status_code=400, detail="Please enter a valid email address")
+    
+    # Check if email already exists
+    result = await db.execute(
+        select(EmailCapture).where(EmailCapture.email == email)
+    )
+    existing = result.scalar_one_or_none()
+    
+    if existing:
+        # Update last_active
+        existing.last_active = datetime.utcnow()
+        await db.commit()
+        return {
+            "message": "Welcome back!",
+            "email": email,
+            "existing": True
+        }
+    
+    # Create new email capture
+    new_capture = EmailCapture(email=email)
+    db.add(new_capture)
+    await db.commit()
+    
+    print(f"📧 New beta user email captured: {email}")
+    
+    return {
+        "message": "Thanks for trying the app! You may receive one feedback email from me.",
+        "email": email,
+        "existing": False
+    }
+
+
 # Podcast routes
 
 @app.post("/api/podcasts")
+@limiter.limit("10/hour")  # Max 10 podcasts per hour per IP
 async def add_podcast(
+    request: Request,
     podcast_data: PodcastCreate,
     db: AsyncSession = Depends(get_db)
 ):
@@ -173,11 +255,56 @@ async def add_podcast(
             }
         }
     
+    except ValueError as e:
+        # RSS feed parsing errors
+        error_msg = str(e)
+        if "Invalid RSS feed" in error_msg:
+            raise HTTPException(
+                status_code=400, 
+                detail="This doesn't appear to be a valid RSS feed. Please check the URL and try again."
+            )
+        elif "No episodes found" in error_msg:
+            raise HTTPException(
+                status_code=400, 
+                detail="This RSS feed doesn't contain any episodes. Please verify the feed URL."
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"RSS feed error: {error_msg}")
+    
     except Exception as e:
         import traceback
-        print(f"❌ Error adding podcast: {str(e)}")
+        import requests.exceptions
+        
+        error_str = str(e)
+        print(f"❌ Error adding podcast: {error_str}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=400, detail=f"Failed to add podcast: {str(e)}")
+        
+        # Network errors
+        if "ConnectionError" in str(type(e)) or "timeout" in error_str.lower():
+            raise HTTPException(
+                status_code=400, 
+                detail="Couldn't reach the RSS feed. Please check your internet connection and try again."
+            )
+        
+        # URL errors
+        if "Invalid URL" in error_str or "MissingSchema" in str(type(e)):
+            raise HTTPException(
+                status_code=400, 
+                detail="This doesn't look like a valid URL. Make sure it starts with http:// or https://"
+            )
+        
+        # 404 errors
+        if "404" in error_str or "Not Found" in error_str:
+            raise HTTPException(
+                status_code=400, 
+                detail="RSS feed not found at this URL. Please check the link and try again."
+            )
+        
+        # Generic error with helpful message
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unable to add podcast. {error_str if len(error_str) < 100 else 'Please verify the RSS feed URL and try again.'}"
+        )
 
 
 @app.get("/api/podcasts")
@@ -205,9 +332,10 @@ async def list_podcasts(db: AsyncSession = Depends(get_db)):
 async def list_podcast_episodes(
     podcast_id: int,
     limit: int = 20,
+    offset: int = 0,
     db: AsyncSession = Depends(get_db)
 ):
-    """List episodes from a podcast feed."""
+    """List episodes from a podcast feed with pagination support."""
     # Get podcast
     result = await db.execute(
         select(Podcast).where(Podcast.id == podcast_id)
@@ -220,6 +348,7 @@ async def list_podcast_episodes(
     # Parse RSS feed
     try:
         podcast_info, episodes = RSSParser.parse_feed(podcast.rss_url)
+        total_available = len(episodes)
         
         # Check which episodes are already processed
         result = await db.execute(
@@ -229,7 +358,7 @@ async def list_podcast_episodes(
         
         # Return episode list with status
         episode_list = []
-        for ep in episodes[:limit]:
+        for ep in episodes[offset:offset + limit]:
             processed = processed_episodes.get(ep.guid)
             episode_list.append({
                 "guid": ep.guid,
@@ -252,7 +381,10 @@ async def list_podcast_episodes(
                 "image_url": podcast.image_url,
                 "slug": podcast.slug
             },
-            "episodes": episode_list
+            "episodes": episode_list,
+            "total_in_feed": total_available,
+            "showing": len(episode_list),
+            "has_more": limit < total_available
         }
     
     except Exception as e:
@@ -262,7 +394,9 @@ async def list_podcast_episodes(
 # Episode processing routes
 
 @app.post("/api/podcasts/{podcast_id}/episodes/process")
+@limiter.limit("20/hour")  # Max 20 episodes per hour per IP
 async def process_episode(
+    request: Request,
     podcast_id: int,
     episode_data: EpisodeProcess,
     background_tasks: BackgroundTasks,
@@ -583,26 +717,41 @@ async def get_episode(
 @app.get("/api/episodes")
 async def list_episodes(
     limit: int = 20,
+    offset: int = 0,
     status: str | None = None,
     db: AsyncSession = Depends(get_db)
 ):
-    """List all episodes."""
-    query = select(Episode).order_by(Episode.created_at.desc()).limit(limit)
+    """List all episodes with pagination - OPTIMIZED with JOIN."""
+    from sqlalchemy import func
+    from sqlalchemy.orm import selectinload
+    
+    # Get total count for pagination
+    count_query = select(func.count()).select_from(Episode)
+    if status:
+        count_query = count_query.where(Episode.status == status)
+    
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+    
+    # Get paginated episodes WITH podcast data in ONE query (using JOIN)
+    # Order by published date (when episode was released) with fallback to created_at
+    query = (
+        select(Episode, Podcast)
+        .join(Podcast, Episode.podcast_id == Podcast.id)
+        .order_by(Episode.published.desc().nulls_last(), Episode.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     
     if status:
         query = query.where(Episode.status == status)
     
     result = await db.execute(query)
-    episodes = result.scalars().all()
+    rows = result.all()
     
-    # Get podcast info for each episode
+    # Build response - much faster now!
     episode_list = []
-    for ep in episodes:
-        result = await db.execute(
-            select(Podcast).where(Podcast.id == ep.podcast_id)
-        )
-        podcast = result.scalar_one()
-        
+    for ep, podcast in rows:
         episode_list.append({
             "id": ep.id,
             "guid": ep.guid,
@@ -615,12 +764,14 @@ async def list_episodes(
             "podcast_image_url": podcast.image_url,
             "created_at": ep.created_at.isoformat()
         })
-        
-        # Debug: log episode status
-        if ep.id == 1:
-            print(f"🔍 Episode 1 status in API response: {ep.status}")
     
-    return {"episodes": episode_list}
+    return {
+        "episodes": episode_list,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(episode_list) < total
+    }
 
 
 if __name__ == "__main__":

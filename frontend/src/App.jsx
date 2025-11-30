@@ -1,18 +1,53 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Home from './pages/Home'
 import Podcasts from './pages/Podcasts'
 import PodcastEpisodes from './pages/PodcastEpisodes'
 import Episodes from './pages/Episodes'
 import EpisodeDetail from './pages/EpisodeDetail'
 import DesignDemo from './pages/DesignDemo'
+import { EmailCaptureModal } from './components/EmailCaptureModal'
+import { captureEmail } from './api/client'
 
 function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
+
+  // Check if user has already provided email
+  useEffect(() => {
+    const emailSubmitted = localStorage.getItem('emailSubmitted')
+    if (!emailSubmitted) {
+      // Show modal after a short delay (better UX)
+      setTimeout(() => setShowEmailModal(true), 1000)
+    }
+  }, [])
+
+  const handleEmailSubmit = async (email) => {
+    try {
+      await captureEmail(email)
+      localStorage.setItem('emailSubmitted', 'true')
+      localStorage.setItem('userEmail', email)
+      setShowEmailModal(false)
+    } catch (error) {
+      throw error
+    }
+  }
+
+  const handleEmailSkip = () => {
+    localStorage.setItem('emailSubmitted', 'skipped')
+    setShowEmailModal(false)
+  }
 
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
+        {/* Email Capture Modal */}
+        <EmailCaptureModal
+          isOpen={showEmailModal}
+          onClose={handleEmailSkip}
+          onSubmit={handleEmailSubmit}
+        />
+
         {/* Navigation */}
         <nav className="bg-white shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

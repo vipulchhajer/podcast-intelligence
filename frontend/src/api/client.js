@@ -24,9 +24,9 @@ export const listPodcasts = async () => {
   return response.data.podcasts;
 };
 
-export const getPodcastEpisodes = async (podcastId, limit = 20) => {
+export const getPodcastEpisodes = async (podcastId, limit = 20, offset = 0) => {
   const response = await apiClient.get(`/api/podcasts/${podcastId}/episodes`, {
-    params: { limit },
+    params: { limit, offset },
   });
   return response.data;
 };
@@ -45,13 +45,20 @@ export const getEpisode = async (episodeId) => {
   return response.data;
 };
 
-export const listEpisodes = async (limit = 20, status = null) => {
+export const listEpisodes = async (limit = 20, offset = 0, status = null) => {
   const response = await apiClient.get('/api/episodes', {
-    params: { limit, status },
+    params: { limit, offset, status },
   });
-  return response.data.episodes;
+  return response.data;
+};
+
+// Email Capture
+export const captureEmail = async (email) => {
+  const response = await apiClient.post('/api/email-capture', { email });
+  return response.data;
 };
 
 export default apiClient;
+
 
 

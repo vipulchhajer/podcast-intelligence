@@ -6,7 +6,8 @@
 const buttonVariants = {
   primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm hover:shadow-md',
   secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-900 shadow-sm hover:shadow-md',
-  success: 'bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md',
+  outline: 'bg-transparent hover:bg-primary-50 text-primary-600 border-2 border-primary-600 hover:border-primary-700',
+  success: 'bg-blue-500 hover:bg-blue-600 text-white shadow-sm hover:shadow-md',
   danger: 'bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow-md',
   ghost: 'bg-transparent hover:bg-gray-100 text-gray-700 border border-gray-300',
   link: 'bg-transparent hover:bg-primary-50 text-primary-600 hover:text-primary-700',
@@ -72,4 +73,6 @@ export function IconButton({ children, className = '', ...props }) {
 }
 
 export default Button
+
+
 

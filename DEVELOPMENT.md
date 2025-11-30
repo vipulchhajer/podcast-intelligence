@@ -98,6 +98,121 @@ When creating new API endpoints that return episode data:
 
 ---
 
+## 📄 Pagination: Checklist
+
+When displaying large lists of episodes or other items:
+
+### ✅ For Database-Backed Lists (My Episodes)
+
+- [ ] **Use the Pagination component**
+  ```javascript
+  import { Pagination } from '../components/Pagination'
+  ```
+
+- [ ] **Track pagination state**
+  ```javascript
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const [limit] = useState(20) // Items per page
+  ```
+
+- [ ] **Calculate offset for API calls**
+  ```javascript
+  const offset = (currentPage - 1) * limit
+  const data = await listEpisodes(limit, offset, statusFilter)
+  ```
+
+- [ ] **Add page change handler**
+  ```javascript
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  
+  const totalPages = Math.ceil(totalItems / limit)
+  ```
+
+- [ ] **Render pagination controls**
+  ```jsx
+  <Pagination
+    currentPage={currentPage}
+    totalPages={totalPages}
+    onPageChange={handlePageChange}
+    total={totalItems}
+    showing={items.length}
+  />
+  ```
+
+- [ ] **Reset to page 1 when filters change**
+  ```javascript
+  useEffect(() => {
+    setCurrentPage(1)
+    fetchData()
+  }, [statusFilter])
+  ```
+
+### ✅ For RSS Feed Lists (Podcast Episodes)
+
+- [ ] **Use "Load More" pattern instead of pagination**
+  ```javascript
+  const [limit, setLimit] = useState(20)
+  const [totalInFeed, setTotalInFeed] = useState(0)
+  const [loading, setLoading] = useState(false)
+  ```
+
+- [ ] **Implement load more handler**
+  ```javascript
+  const handleLoadMore = () => {
+    setLoading(true)
+    setLimit(prev => prev + 20)
+  }
+  ```
+
+- [ ] **Show load more button conditionally**
+  ```jsx
+  {items.length < totalInFeed && (
+    <Button onClick={handleLoadMore} loading={loading}>
+      Load More Episodes ({totalInFeed - items.length} remaining)
+    </Button>
+  )}
+  ```
+
+- [ ] **Display item counts**
+  ```jsx
+  <p>Showing {items.length} of {totalInFeed} episodes from RSS feed</p>
+  ```
+
+### ✅ Backend Pagination Support
+
+- [ ] **Accept limit and offset parameters**
+  ```python
+  @app.get("/api/episodes")
+  async def list_episodes(
+      limit: int = 20,
+      offset: int = 0,
+      status: str | None = None,
+      db: AsyncSession = Depends(get_db)
+  ):
+  ```
+
+- [ ] **Return pagination metadata**
+  ```python
+  return {
+      "episodes": episode_list,
+      "total": total,
+      "limit": limit,
+      "offset": offset,
+      "has_more": offset + len(episodes) < total
+  }
+  ```
+
+- [ ] **Use SQL LIMIT and OFFSET for efficiency**
+  ```python
+  query = select(Episode).order_by(Episode.created_at.desc()).limit(limit).offset(offset)
+  ```
+
+---
+
 ## 📱 Mobile-Responsive Images: Checklist
 
 When adding images anywhere in the app:

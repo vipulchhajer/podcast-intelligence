@@ -40,6 +40,21 @@ class Podcast(Base):
     episodes = relationship("Episode", back_populates="podcast")
 
 
+class EmailCapture(Base):
+    """Email capture for beta users."""
+    __tablename__ = "email_captures"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_active = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    feedback_sent = Column(Boolean, default=False)  # Track if feedback email was sent
+    
+    # Optional: Track which features they use
+    episodes_processed = Column(Integer, default=0)
+    podcasts_added = Column(Integer, default=0)
+
+
 class Episode(Base):
     """Episode model."""
     __tablename__ = "episodes"
@@ -57,7 +72,7 @@ class Episode(Base):
     duration = Column(Integer, nullable=True)  # Duration in seconds
     
     # Processing status
-    status = Column(String, default="pending")  # pending, downloading, transcribing, summarizing, completed, failed
+    status = Column(String, default="pending", index=True)  # pending, downloading, transcribing, summarizing, completed, failed
     error_message = Column(Text, nullable=True)  # Store error details if processing fails
     
     # File paths (relative to storage directory)
@@ -70,7 +85,7 @@ class Episode(Base):
     summary_json = Column(Text, nullable=True)  # JSON string
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
     

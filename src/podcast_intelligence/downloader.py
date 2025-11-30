@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
-import httpx
+import requests
 from rich.progress import Progress, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
 
 
@@ -37,13 +37,9 @@ class AudioDownloader:
         print(f"   URL: {url}")
         print(f"   Output: {output_path}")
         
-        # Add headers to identify as a legitimate podcast client
+        # Use simple headers with requests library (works better than httpx for Substack)
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; PodcastApp/1.0; +http://podcast-app.example.com)",
-            "Accept": "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
+            "User-Agent": "podcast-app/1.0"
         }
         
         with Progress(
@@ -53,7 +49,7 @@ class AudioDownloader:
             TimeRemainingColumn(),
         ) as progress:
             
-            with httpx.stream("GET", url, headers=headers, timeout=timeout, follow_redirects=True) as response:
+            with requests.get(url, headers=headers, timeout=timeout, allow_redirects=True, stream=True) as response:
                 response.raise_for_status()
                 
                 total = int(response.headers.get("content-length", 0))
@@ -61,9 +57,10 @@ class AudioDownloader:
                 task = progress.add_task("Downloading", total=total)
                 
                 with open(output_path, "wb") as f:
-                    for chunk in response.iter_bytes(chunk_size=8192):
-                        f.write(chunk)
-                        progress.update(task, advance=len(chunk))
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:  # filter out keep-alive chunks
+                            f.write(chunk)
+                            progress.update(task, advance=len(chunk))
         
         file_size = output_path.stat().st_size
         print(f"✓ Downloaded {file_size / (1024 * 1024):.1f} MB")
@@ -93,13 +90,9 @@ class AudioDownloader:
         # Check if file exists and get current size
         existing_size = output_path.stat().st_size if output_path.exists() else 0
         
-        # Add headers to identify as a legitimate podcast client
+        # Use simple headers with requests library (works better than httpx for Substack)
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; PodcastApp/1.0; +http://podcast-app.example.com)",
-            "Accept": "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
+            "User-Agent": "podcast-app/1.0"
         }
         if existing_size > 0:
             headers["Range"] = f"bytes={existing_size}-"
@@ -114,7 +107,7 @@ class AudioDownloader:
             TimeRemainingColumn(),
         ) as progress:
             
-            with httpx.stream("GET", url, headers=headers, timeout=timeout, follow_redirects=True) as response:
+            with requests.get(url, headers=headers, timeout=timeout, allow_redirects=True, stream=True) as response:
                 response.raise_for_status()
                 
                 total = int(response.headers.get("content-length", 0))
@@ -124,9 +117,10 @@ class AudioDownloader:
                 task = progress.add_task("Downloading", total=total, completed=existing_size)
                 
                 with open(output_path, mode) as f:
-                    for chunk in response.iter_bytes(chunk_size=8192):
-                        f.write(chunk)
-                        progress.update(task, advance=len(chunk))
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:  # filter out keep-alive chunks
+                            f.write(chunk)
+                            progress.update(task, advance=len(chunk))
         
         file_size = output_path.stat().st_size
         print(f"✓ Downloaded {file_size / (1024 * 1024):.1f} MB")
