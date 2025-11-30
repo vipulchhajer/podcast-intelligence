@@ -8,6 +8,10 @@ backend/*.db
 backend/storage/
 backend/podcast_app.db
 
+# Audio/Episode files (should NOT be in git!)
+output/
+storage/
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
