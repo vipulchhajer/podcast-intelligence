@@ -142,12 +142,97 @@ Before suggesting code:
 ✅ Code refactoring to reduce duplication
 ✅ Accessibility improvements
 
+## Railway Deployment (Production)
+
+### Critical Configuration Requirements
+
+**Backend is deployed on Railway at:** `podcast-intelligence-production.up.railway.app`
+
+#### 1. Dockerfile Requirements
+```dockerfile
+# MUST include ffmpeg for audio processing
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# MUST use shell form for CMD to expand PORT variable
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+```
+
+#### 2. Required Environment Variables on Railway
+- `GROQ_API_KEY` - Your Groq API key
+- `SECRET_KEY` - Random string for security
+- `DATABASE_URL` - `sqlite+aiosqlite:///./podcast_app.db`
+- `CORS_ORIGINS` - Frontend URL (or `*` for testing)
+- `LLM_PROVIDER` - `groq`
+- `TRANSCRIPTION_MODEL` - `whisper-large-v3`
+- `SUMMARIZATION_MODEL` - `llama-3.3-70b-versatile`
+
+#### 3. Railway Settings
+- **Root Directory:** `/` (NOT `/backend`)
+- **Builder:** DOCKERFILE
+- **Dockerfile Path:** `Dockerfile` (at project root)
+- **Custom Start Command:** Leave empty (let Dockerfile handle it)
+- **Health Check Path:** `/health`
+
+#### 4. .gitignore MUST Include
+```
+# Audio/Episode files (NEVER commit to git!)
+output/
+storage/
+backend/storage/
+*.mp3
+*.wav
+*.16k.wav
+```
+
+**Why:** Audio files are 100-200MB each and will break GitHub push (100MB limit)
+
+#### 5. File Storage Architecture
+- **Database (SQLite):** Stores episode metadata (title, status, file paths)
+- **Filesystem (`backend/storage/`):** Stores actual audio files
+- **Git:** ONLY stores code (never audio/media files)
+
+#### 6. If Large Files Accidentally Committed
+```bash
+# Remove from Git history
+git filter-branch --force --index-filter \
+  'git rm -r --cached --ignore-unmatch output/' \
+  --prune-empty --tag-name-filter cat -- --all
+
+# Force push clean history
+git push --force origin main
+```
+
+#### 7. Common Deployment Errors & Fixes
+
+**Error:** `[Errno 2] No such file or directory: 'ffmpeg'`  
+**Fix:** Add `ffmpeg` to Dockerfile `RUN apt-get install` line
+
+**Error:** `Invalid value for '--port': '$PORT' is not a valid integer`  
+**Fix:** Use shell form in CMD: `CMD ["sh", "-c", "uvicorn ... --port ${PORT:-8000}"]`
+
+**Error:** `No start command was found`  
+**Fix:** Ensure Root Directory is `/` and remove Custom Start Command in Railway UI
+
+**Error:** `GH001: Large files detected`  
+**Fix:** Add audio folders to `.gitignore` and use `git filter-branch` to clean history
+
+#### 8. Deployment Checklist
+- [ ] `ffmpeg` in Dockerfile
+- [ ] All 7 environment variables set in Railway
+- [ ] Root Directory = `/`
+- [ ] Audio files in `.gitignore`
+- [ ] No Custom Start Command set
+- [ ] Health check returns `{"status":"healthy"}`
+- [ ] Test episode processing works
+
 ## Suggestions to Avoid
 
 ❌ Major architectural changes (unless critical bug)
 ❌ Adding authentication (planned for Phase 2)
 ❌ Comprehensive test suites (MVP stage)
-❌ Deployment optimization (works locally for now)
+❌ Committing audio/media files to Git (use .gitignore!)
 ❌ Database migrations to PostgreSQL (SQLite fine for MVP)
 
 ## Response Style
@@ -171,8 +256,9 @@ The user has built this app to share with non-technical friends. They value:
 
 ---
 
-**Last Updated:** November 29, 2024
-**Project Stage:** MVP - Local development for small user base
+**Last Updated:** November 30, 2024
+**Project Stage:** MVP - Deployed to Railway, ready to share with friends
+**Backend URL:** https://podcast-intelligence-production.up.railway.app
 
 
 
