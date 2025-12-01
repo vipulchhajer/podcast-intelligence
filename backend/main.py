@@ -207,6 +207,18 @@ async def add_podcast(
 ):
     """Add a new podcast feed."""
     try:
+        # Safety check: Max podcasts per user (prevent database bloat)
+        result_count = await db.execute(
+            select(Podcast).where(Podcast.id > 0)  # Count all podcasts (TODO: filter by user_id when auth is added)
+        )
+        total_podcasts = len(result_count.scalars().all())
+        
+        if total_podcasts >= settings.max_podcasts_per_user:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Maximum podcast limit reached ({settings.max_podcasts_per_user} podcasts). Please remove some podcasts before adding more."
+            )
+        
         # Parse RSS feed to get podcast info
         podcast_info, episodes = RSSParser.parse_feed(str(podcast_data.rss_url))
         
@@ -418,6 +430,31 @@ async def process_episode(
     
     if not episode_info:
         raise HTTPException(status_code=404, detail="Episode not found in feed")
+    
+    # Safety check: Episode duration limit (prevent huge bills)
+    if episode_info.duration and episode_info.duration > settings.max_episode_duration_minutes * 60:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Episode is too long ({episode_info.duration // 60} minutes). Maximum allowed is {settings.max_episode_duration_minutes} minutes to prevent excessive API costs."
+        )
+    
+    # Safety check: Daily processing limit per user (prevent abuse)
+    from datetime import datetime, timedelta
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    result_count = await db.execute(
+        select(Episode).where(
+            Episode.user_id == 1,  # TODO: Use actual user_id when auth is added
+            Episode.created_at >= today_start
+        )
+    )
+    episodes_today = result_count.scalars().all()
+    
+    if len(episodes_today) >= settings.max_episodes_per_day:
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Daily limit reached ({settings.max_episodes_per_day} episodes per day). This limit helps keep costs manageable. Try again tomorrow!"
+        )
     
     # Check if episode already exists
     result = await db.execute(

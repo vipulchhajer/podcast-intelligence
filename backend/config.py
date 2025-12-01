@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # Safety limits
     max_episode_duration_minutes: int = 180  # 3 hours max
     max_episodes_per_day: int = 50  # Limit daily processing
+    max_podcasts_per_user: int = 20  # Limit total podcasts per user
     
     @property
     def cors_origins_list(self) -> list[str]:
