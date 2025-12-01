@@ -39,6 +39,17 @@ class Settings(BaseSettings):
         """Parse CORS origins from comma-separated string."""
         return [x.strip() for x in self.cors_origins.split(',')]
     
+    @property
+    def async_database_url(self) -> str:
+        """Convert DATABASE_URL to async format for SQLAlchemy."""
+        # Railway provides DATABASE_URL in postgres:// format
+        # SQLAlchemy 2.0 async needs postgresql+asyncpg://
+        if self.database_url.startswith("postgres://"):
+            return self.database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif self.database_url.startswith("postgresql://"):
+            return self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return self.database_url  # SQLite or already correct format
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

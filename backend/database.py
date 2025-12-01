@@ -5,10 +5,12 @@ from config import settings
 from models import Base
 
 # Create async engine
+# Automatically use the correct driver based on DATABASE_URL
 engine = create_async_engine(
-    settings.database_url,
+    settings.async_database_url,  # Use the async-converted URL
     echo=False,  # Set to True for SQL query logging
-    future=True
+    future=True,
+    pool_pre_ping=True,  # Verify connections before using them
 )
 
 # Create session factory
