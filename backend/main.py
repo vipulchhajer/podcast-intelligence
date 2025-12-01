@@ -653,6 +653,17 @@ async def process_episode_background(episode_id: int, podcast_slug: str, episode
             await db.commit()
             
             print(f"✓ Episode {episode_id} processed successfully")
+            
+            # Clean up audio files to save space (we have transcript & summary in DB)
+            print(f"🧹 Cleaning up audio files...")
+            import shutil
+            try:
+                if storage_path.exists():
+                    shutil.rmtree(storage_path)
+                    print(f"✓ Cleaned up storage directory")
+            except Exception as cleanup_error:
+                print(f"⚠️  Failed to clean up files: {cleanup_error}")
+                # Don't fail the whole process if cleanup fails
         
         except Exception as e:
             # Update status: failed with user-friendly error message
