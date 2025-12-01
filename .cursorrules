@@ -188,10 +188,22 @@ backend/storage/
 
 **Why:** Audio files are 100-200MB each and will break GitHub push (100MB limit)
 
-#### 5. File Storage Architecture
-- **Database (SQLite):** Stores episode metadata (title, status, file paths)
-- **Filesystem (`backend/storage/`):** Stores actual audio files
+#### 5. File Storage Architecture (Storage-less MVP)
+- **Database (PostgreSQL on Railway):** Stores ALL episode data:
+  - Episode metadata (title, status, published date)
+  - Full transcript text (`transcript_text` column)
+  - Complete summary JSON (`summary_json` column)
+- **Filesystem (`backend/storage/`):** Temporary storage during processing
+  - Audio files downloaded → transcribed → summarized
+  - **AUTOMATICALLY DELETED** after processing completes
+  - Storage directory is ephemeral (wiped on Railway redeployments)
 - **Git:** ONLY stores code (never audio/media files)
+
+**Why Storage-less:**
+- Railway's filesystem is ephemeral (resets on every deployment)
+- Avoids storage costs ($0.25/GB/month for volumes)
+- Transcript + summary in PostgreSQL persist forever
+- Users only need text content, not audio files
 
 #### 6. If Large Files Accidentally Committed
 ```bash
