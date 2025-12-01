@@ -126,10 +126,19 @@ function Episodes() {
     try {
       await processEpisode(episode.podcast_id, episode.guid)
       
-      // Refresh episodes after a short delay
+      // Optimistically update local state
+      setEpisodes(prevEpisodes =>
+        prevEpisodes.map(ep =>
+          ep.id === episode.id
+            ? { ...ep, status: 'pending', error_message: null }
+            : ep
+        )
+      )
+      
+      // Refresh episodes to get latest status from server
       setTimeout(() => {
         fetchEpisodes(true)
-      }, 1000)
+      }, 2000)
     } catch (error) {
       console.error('Failed to retry episode:', error)
       // Use console for now - could add toast notification in future

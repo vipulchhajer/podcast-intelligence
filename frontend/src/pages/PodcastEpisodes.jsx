@@ -94,13 +94,23 @@ function PodcastEpisodes() {
   const handleProcessEpisode = async (episode) => {
     setProcessingEpisodes(new Set(processingEpisodes).add(episode.guid))
     try {
-      await processEpisode(podcastId, episode.guid)
+      const result = await processEpisode(podcastId, episode.guid)
+      
+      // Optimistically update local state to show "pending" status immediately
+      setEpisodes(prevEpisodes => 
+        prevEpisodes.map(ep => 
+          ep.guid === episode.guid 
+            ? { ...ep, status: 'pending', id: result.episode_id }
+            : ep
+        )
+      )
+      
       showToast('Processing started! Check "My Episodes" to track progress.', 'success')
       
-      // Refresh episodes to update status (silent refresh)
+      // Refresh episodes to get latest status from server
       setTimeout(() => {
         fetchEpisodes(true)
-      }, 1000)
+      }, 2000) // Increased to 2 seconds for better reliability
     } catch (error) {
       console.error('Failed to process episode:', error)
       const errorMsg = error.response?.data?.detail || 'Failed to start processing. Please try again.'
