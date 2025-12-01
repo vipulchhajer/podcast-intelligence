@@ -173,39 +173,76 @@ function EpisodeDetail() {
                     Notable Quotes
                   </h2>
                   <div className="space-y-6">
-                    {summary.notable_quotes.split('\n\n').filter(quote => quote.trim()).map((quote, index) => {
-                      // Remove numbering if present (e.g., "1. ", "2. ")
-                      const cleanQuote = quote.replace(/^\d+\.\s*/, '').trim()
+                    {(() => {
+                      // Extract only the numbered quotes from the notable_quotes field
+                      // The AI returns a summary followed by numbered quotes
+                      const quotesText = summary.notable_quotes
                       
-                      // Split quote into actual quote and context
-                      // Pattern: "Quote text" — Context text
-                      const quoteMatch = cleanQuote.match(/^[""](.+?)[""](.*)$/)
-                      const actualQuote = quoteMatch ? quoteMatch[1] : cleanQuote
-                      const context = quoteMatch ? quoteMatch[2].replace(/^[\s—-]+/, '') : ''
+                      // Find where the numbered list starts (look for pattern like "1. " at start of line)
+                      const lines = quotesText.split('\n')
+                      const quoteLines = []
+                      let inQuoteSection = false
                       
-                      return (
-                        <div key={index} className="relative bg-gradient-to-br from-blue-50 to-indigo-50 border-l-4 border-primary-500 rounded-r-xl p-6 shadow-sm hover:shadow-md transition-shadow">
-                          {/* Quote icon */}
-                          <svg className="absolute top-4 left-4 w-8 h-8 text-primary-200" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
-                          </svg>
-                          
-                          {/* Quote text - Serif, larger, italic */}
-                          <blockquote className="relative ml-6">
-                            <p className="font-serif text-xl text-gray-900 leading-relaxed italic font-normal mb-3">
-                              "{actualQuote}"
-                            </p>
+                      for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i].trim()
+                        // Check if this line starts with a number followed by a period
+                        if (/^\d+\.\s+/.test(line)) {
+                          inQuoteSection = true
+                          quoteLines.push(line)
+                        } else if (inQuoteSection && line.startsWith('"') && !line.match(/^\d+\./)) {
+                          // Continuation of previous quote (multi-line quote)
+                          if (quoteLines.length > 0) {
+                            quoteLines[quoteLines.length - 1] += ' ' + line
+                          }
+                        }
+                      }
+                      
+                      // If no numbered quotes found, fallback to splitting by double newlines
+                      if (quoteLines.length === 0) {
+                        quoteLines.push(...quotesText.split('\n\n').filter(q => q.trim() && q.includes('"')))
+                      }
+                      
+                      return quoteLines.map((quoteLine, index) => {
+                        // Remove numbering (e.g., "1. ", "2. ")
+                        const cleanLine = quoteLine.replace(/^\d+\.\s*/, '').trim()
+                        
+                        // Extract quote and context
+                        // Pattern 1: "Quote text" — Context
+                        // Pattern 2: "Quote text" Context (no em dash)
+                        const quoteMatch = cleanLine.match(/^[""]([^""]+?)[""][\s—-]*(.*)$/)
+                        
+                        if (!quoteMatch) {
+                          // If no match, skip this line
+                          return null
+                        }
+                        
+                        const actualQuote = quoteMatch[1].trim()
+                        const context = quoteMatch[2].replace(/^[\s—-]+/, '').trim()
+                        
+                        return (
+                          <div key={index} className="relative bg-gradient-to-br from-blue-50 to-indigo-50 border-l-4 border-primary-500 rounded-r-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                            {/* Quote icon */}
+                            <svg className="absolute top-4 left-4 w-8 h-8 text-primary-200" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
+                            </svg>
                             
-                            {/* Context/Commentary - Sans-serif, smaller, lighter */}
-                            {context && (
-                              <footer className="font-sans text-sm text-gray-600 font-normal not-italic border-t border-gray-200 pt-3 mt-3">
-                                {context}
-                              </footer>
-                            )}
-                          </blockquote>
-                        </div>
-                      )
-                    })}
+                            {/* Quote text - Serif, larger, italic */}
+                            <blockquote className="relative ml-6">
+                              <p className="font-serif text-xl text-gray-900 leading-relaxed italic font-normal mb-3">
+                                "{actualQuote}"
+                              </p>
+                              
+                              {/* Context/Commentary - Sans-serif, smaller, lighter */}
+                              {context && (
+                                <footer className="font-sans text-sm text-gray-600 font-normal not-italic border-t border-gray-200 pt-3 mt-3">
+                                  {context}
+                                </footer>
+                              )}
+                            </blockquote>
+                          </div>
+                        )
+                      }).filter(Boolean)
+                    })()}
                   </div>
                 </div>
               )}
