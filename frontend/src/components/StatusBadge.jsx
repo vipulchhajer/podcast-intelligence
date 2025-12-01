@@ -11,6 +11,11 @@ const LoadingSpinner = () => (
 )
 
 const statusConfig = {
+  new: {
+    colors: 'bg-gray-50 text-gray-700 border-gray-200/60',
+    label: 'Not Processed',
+    icon: null,
+  },
   pending: {
     colors: 'bg-blue-50 text-blue-700 border-blue-200/60',
     label: 'Queued',
@@ -52,12 +57,13 @@ const statusConfig = {
 }
 
 export function StatusBadge({ status, variant = 'default', className = '' }) {
-  // Default to 'pending' for unknown statuses (better than 'new' which implies clickable)
-  const config = statusConfig[status] || statusConfig.pending
+  // Default to 'new' for unknown statuses
+  const config = statusConfig[status] || statusConfig.new
   
   if (variant === 'dot') {
     // Minimal dot variant
     const dotColors = {
+      new: 'bg-gray-400',
       pending: 'bg-blue-400',
       downloading: 'bg-blue-400',
       transcribing: 'bg-indigo-400',
@@ -68,7 +74,7 @@ export function StatusBadge({ status, variant = 'default', className = '' }) {
     
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        <span className={`w-2 h-2 rounded-full ${dotColors[status] || dotColors.pending}`} />
+        <span className={`w-2 h-2 rounded-full ${dotColors[status] || dotColors.new}`} />
         <span className="text-sm text-gray-600 capitalize">{config.label}</span>
       </div>
     )
