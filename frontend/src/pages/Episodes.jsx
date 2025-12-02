@@ -152,15 +152,16 @@ function Episodes() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <h1 className="text-3xl font-bold text-gray-900">My Episodes</h1>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">My Episodes</h1>
           
           {/* Status Filter */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
             <Button
               variant={statusFilter === null ? 'primary' : 'secondary'}
               size="sm"
               onClick={() => setStatusFilter(null)}
+              className="flex-1 sm:flex-none text-xs sm:text-sm"
             >
               All
             </Button>
@@ -168,6 +169,7 @@ function Episodes() {
               variant={statusFilter === 'completed' ? 'primary' : 'secondary'}
               size="sm"
               onClick={() => setStatusFilter('completed')}
+              className="flex-1 sm:flex-none text-xs sm:text-sm"
             >
               Completed
             </Button>
@@ -175,6 +177,7 @@ function Episodes() {
               variant={statusFilter === 'transcribing' ? 'primary' : 'secondary'}
               size="sm"
               onClick={() => setStatusFilter('transcribing')}
+              className="flex-1 sm:flex-none text-xs sm:text-sm"
             >
               Processing
             </Button>
@@ -197,6 +200,7 @@ function Episodes() {
                   )}
                 </svg>
               }
+              className="text-xs sm:text-sm"
             >
               {allExpanded ? 'Collapse All' : 'Expand All'}
             </Button>
@@ -214,9 +218,9 @@ function Episodes() {
           {[1, 2, 3, 4, 5].map(i => <EpisodeSkeleton key={i} />)}
         </div>
       ) : episodes.length === 0 ? (
-        <div className="bg-white shadow-sm rounded-xl p-12 text-center">
-          <p className="text-gray-500 mb-6">No episodes yet. Start by adding a podcast!</p>
-          <Button variant="primary" size="lg" onClick={() => navigate('/podcasts')}>
+        <div className="bg-white shadow-sm rounded-lg sm:rounded-xl p-4 sm:p-6 text-center">
+          <p className="text-gray-500 mb-4 sm:mb-6 text-sm sm:text-base">No episodes yet. Start by adding a podcast!</p>
+          <Button variant="primary" size="md" onClick={() => navigate('/podcasts')} className="w-full sm:w-auto">
             Go to Podcasts
           </Button>
         </div>
@@ -228,34 +232,35 @@ function Episodes() {
               const isExpanded = expandedPodcasts.has(group.podcast_id)
               
               return (
-                <div key={group.podcast_id} className="bg-white shadow-sm rounded-xl overflow-hidden transition-all">
+                <div key={group.podcast_id} className="bg-white shadow-sm rounded-lg sm:rounded-xl overflow-hidden transition-all">
                   {/* Podcast header - Clickable to expand/collapse */}
                   <button
                     onClick={() => togglePodcast(group.podcast_id)}
-                    className="w-full bg-gradient-to-r from-primary-50 to-white px-6 py-4 hover:from-primary-100 hover:to-primary-50 transition-colors"
+                    className="w-full bg-gradient-to-r from-primary-50 to-white px-4 sm:px-6 py-3 sm:py-4 hover:from-primary-100 hover:to-primary-50 transition-colors active:bg-primary-100"
                   >
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3 sm:gap-4">
                       {group.podcast_image_url && (
                         <img 
                           src={group.podcast_image_url} 
                           alt={group.podcast_title}
-                          className="w-12 h-12 rounded-lg object-cover shadow-sm flex-shrink-0"
+                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover shadow-sm flex-shrink-0"
                           loading="lazy"
                           onError={(e) => {
                             e.target.style.display = 'none'
                           }}
                         />
                       )}
-                      <div className="flex-1 text-left">
-                        <h2 className="text-lg font-bold text-gray-900">{group.podcast_title}</h2>
-                        <p className="text-sm text-gray-600">
+                      <div className="flex-1 text-left min-w-0">
+                        <h2 className="text-base sm:text-lg font-bold text-gray-900 line-clamp-1">{group.podcast_title}</h2>
+                        <p className="text-xs sm:text-sm text-gray-600">
                           {group.episodes.length} episode{group.episodes.length !== 1 ? 's' : ''}
                           {!isExpanded && (
-                            <span className="text-gray-500"> • Click to expand</span>
+                            <span className="text-gray-500 hidden sm:inline"> • Tap to expand</span>
                           )}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                        {/* View Podcast link - Hidden on mobile, shown on desktop */}
                         <Button
                           variant="link"
                           size="sm"
@@ -263,17 +268,18 @@ function Episodes() {
                             e.stopPropagation()
                             navigate(`/podcasts/${group.podcast_id}`)
                           }}
+                          className="hidden sm:inline-flex text-xs"
                         >
                           View Podcast →
                         </Button>
-                        {/* Expand/Collapse Icon */}
+                        {/* Expand/Collapse Icon - Prominent on mobile */}
                         <svg 
-                          className={`w-6 h-6 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                          className={`w-5 h-5 sm:w-6 sm:h-6 text-primary-600 sm:text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                           fill="none" 
                           stroke="currentColor" 
                           viewBox="0 0 24 24"
                         >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
                         </svg>
                       </div>
                     </div>
@@ -286,16 +292,16 @@ function Episodes() {
                     <li
                       key={episode.id}
                       onClick={() => episode.status === 'completed' && navigate(`/episodes/${episode.id}`)}
-                      className={`p-6 ${
+                      className={`p-4 sm:p-6 ${
                         episode.status === 'completed'
-                          ? 'hover:bg-gray-50 cursor-pointer'
+                          ? 'hover:bg-gray-50 cursor-pointer active:bg-gray-100'
                           : 'cursor-default'
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
                         <div className="flex-1 min-w-0">
-                          <p className="text-base sm:text-lg font-semibold text-gray-900 line-clamp-2">{episode.title}</p>
-                          <p className="mt-1 text-xs sm:text-sm text-gray-500">
+                          <p className="text-sm sm:text-base font-semibold text-gray-900 line-clamp-2 leading-snug">{episode.title}</p>
+                          <p className="mt-1 text-xs text-gray-500">
                             {episode.published ? new Date(episode.published).toLocaleDateString() : 'No date'} •{' '}
                             Added {new Date(episode.created_at).toLocaleDateString()}
                           </p>
@@ -339,7 +345,7 @@ function Episodes() {
                             </div>
                           )}
                         </div>
-                        <div className="ml-4 flex-shrink-0 flex items-center gap-3">
+                        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                           <StatusBadge status={episode.status} />
                           
                           {/* Retry button for failed episodes */}
@@ -351,12 +357,14 @@ function Episodes() {
                               loading={retrying[episode.id]}
                               disabled={retrying[episode.id]}
                               icon={
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                               }
+                              className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
                             >
-                              {retrying[episode.id] ? 'Retrying...' : 'Retry'}
+                              <span className="hidden sm:inline">{retrying[episode.id] ? 'Retrying...' : 'Retry'}</span>
+                              <span className="sm:hidden">Retry</span>
                             </Button>
                           )}
                           
@@ -369,18 +377,20 @@ function Episodes() {
                               loading={retrying[episode.id]}
                               disabled={retrying[episode.id]}
                               icon={
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                               }
+                              className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5"
                             >
-                              {retrying[episode.id] ? 'Restarting...' : 'Restart'}
+                              <span className="hidden sm:inline">{retrying[episode.id] ? 'Restarting...' : 'Restart'}</span>
+                              <span className="sm:hidden">Restart</span>
                             </Button>
                           )}
                           
                           {/* Show progress message only for actually processing episodes */}
                           {['downloading', 'transcribing', 'summarizing'].includes(episode.status) && (
-                            <div className="text-xs text-gray-500 italic">
+                            <div className="text-xs text-gray-500 italic hidden sm:block">
                               Processing...
                             </div>
                           )}

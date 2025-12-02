@@ -134,10 +134,10 @@ function PodcastEpisodes() {
 
   if (!podcast) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white shadow-sm rounded-xl p-12 text-center">
-          <p className="text-gray-500 mb-6">Podcast not found</p>
-          <Button variant="primary" size="lg" onClick={() => navigate('/podcasts')}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="bg-white shadow-sm rounded-lg sm:rounded-xl p-8 sm:p-12 text-center">
+          <p className="text-gray-500 mb-4 sm:mb-6 text-sm sm:text-base">Podcast not found</p>
+          <Button variant="primary" size="md" onClick={() => navigate('/podcasts')} className="w-full sm:w-auto">
             Back to Podcasts
           </Button>
         </div>
@@ -146,16 +146,16 @@ function PodcastEpisodes() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       {/* Back Button */}
       <Button
         variant="link"
         onClick={() => navigate('/podcasts')}
-        className="mb-4"
+        className="mb-3 sm:mb-4 text-sm sm:text-base"
         icon={
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
         }
@@ -164,14 +164,14 @@ function PodcastEpisodes() {
       </Button>
 
       {/* Podcast Header */}
-      <div className="bg-white shadow-sm rounded-xl overflow-hidden mb-8">
-        <div className="flex flex-col sm:flex-row gap-6 p-6">
+      <div className="bg-white shadow-sm rounded-lg sm:rounded-xl overflow-hidden mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 p-4 sm:p-6">
           {podcast.image_url && (
             <div className="flex-shrink-0">
               <img 
                 src={podcast.image_url} 
                 alt={podcast.title}
-                className="w-full sm:w-48 sm:h-48 rounded-lg object-cover shadow-md"
+                className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-lg object-cover shadow-md mx-auto sm:mx-0"
                 loading="lazy"
                 onError={(e) => {
                   e.target.style.display = 'none'
@@ -180,7 +180,7 @@ function PodcastEpisodes() {
             </div>
           )}
           <div className="flex-1">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{podcast.title}</h1>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-2">{podcast.title}</h1>
             {podcast.author && (
               <p className="text-sm text-gray-600 mb-2">By {podcast.author}</p>
             )}
@@ -190,11 +190,11 @@ function PodcastEpisodes() {
       </div>
 
       {/* Episodes List */}
-      <div className="bg-white shadow-sm rounded-xl p-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-6">
+      <div className="bg-white shadow-sm rounded-lg sm:rounded-xl p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-2 mb-6">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Episodes</h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900">Episodes</h2>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">
               {episodes.length > 0 && (
                 <>
                   Showing {(currentPage - 1) * episodesPerPage + 1}-
@@ -206,8 +206,8 @@ function PodcastEpisodes() {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
+            <span className="text-xs text-gray-500 hidden sm:inline">
               Auto-updates every 3s • Last: {lastRefresh.toLocaleTimeString()}
             </span>
             <Button
@@ -219,6 +219,7 @@ function PodcastEpisodes() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               }
+              className="text-xs sm:text-sm"
             >
               Refresh
             </Button>

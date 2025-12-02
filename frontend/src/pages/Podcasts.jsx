@@ -140,23 +140,23 @@ function Podcasts() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Podcasts</h1>
+      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6 sm:mb-8">Podcasts</h1>
 
       {/* Add Podcast Form */}
-      <div className="bg-white shadow-sm rounded-xl p-6 mb-8">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">Add New Podcast</h2>
+      <div className="bg-white shadow-sm rounded-lg sm:rounded-xl p-4 sm:p-6 mb-6 sm:mb-8">
+        <h2 className="text-base sm:text-lg font-medium text-gray-900 mb-4">Add New Podcast</h2>
         <form onSubmit={handleAddPodcast} className="space-y-4">
           <div className="space-y-2">
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <input
                 type="text"
                 value={rssUrl}
                 onChange={handleUrlChange}
                 placeholder="Paste RSS feed URL here..."
-                className={`flex-1 rounded-lg shadow-sm focus:ring-primary-500 ${
+                className={`flex-1 rounded-lg shadow-sm text-sm sm:text-base focus:ring-primary-500 ${
                   urlError 
                     ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
                     : 'border-gray-300 focus:border-primary-500'
@@ -170,6 +170,7 @@ function Podcasts() {
                 size="md"
                 loading={addingPodcast}
                 disabled={addingPodcast || !!urlError}
+                className="w-full sm:w-auto text-sm sm:text-base"
               >
                 {addingPodcast ? 'Adding...' : 'Add Podcast'}
               </Button>
@@ -217,16 +218,16 @@ function Podcasts() {
 
       {/* Podcasts List */}
       {podcasts.length === 0 ? (
-        <div className="bg-white shadow-sm rounded-xl p-12 text-center">
-          <p className="text-gray-500">No podcasts yet. Add your first podcast above!</p>
+        <div className="bg-white shadow-sm rounded-lg sm:rounded-xl p-8 sm:p-12 text-center">
+          <p className="text-gray-500 text-sm sm:text-base">No podcasts yet. Add your first podcast above!</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
           {podcasts.map((podcast) => (
             <div
               key={podcast.id}
               onClick={() => handlePodcastClick(podcast)}
-              className="bg-white shadow-sm rounded-xl overflow-hidden cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all duration-200 group"
+              className="bg-white shadow-sm rounded-lg sm:rounded-xl overflow-hidden cursor-pointer hover:shadow-md active:scale-95 sm:hover:scale-[1.02] transition-all duration-200 group"
             >
               {podcast.image_url && (
                 <div className="w-full aspect-square bg-gray-100">
@@ -241,9 +242,9 @@ function Podcasts() {
                   />
                 </div>
               )}
-              <div className="p-4">
-                <h3 className="text-base md:text-lg font-medium text-gray-900 mb-1 line-clamp-2">{podcast.title}</h3>
-                <p className="text-xs md:text-sm text-gray-500 truncate">{podcast.slug}</p>
+              <div className="p-2 sm:p-3 md:p-4">
+                <h3 className="text-sm sm:text-base font-medium text-gray-900 mb-1 line-clamp-2">{podcast.title}</h3>
+                <p className="text-xs text-gray-500 truncate hidden sm:block">{podcast.slug}</p>
               </div>
             </div>
           ))}
